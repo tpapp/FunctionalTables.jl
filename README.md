@@ -10,25 +10,4 @@
 [![Coverage Status](https://coveralls.io/repos/tpapp/DataColumns.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/tpapp/DataColumns.jl?branch=master)
 [![codecov.io](http://codecov.io/github/tpapp/DataColumns.jl/coverage.svg?branch=master)](http://codecov.io/github/tpapp/DataColumns.jl?branch=master)
 
-
-
-## API and architecture notes
-
-### Column storage and element access
-
-- Columns are immutable.
-
-- Columns are created with the following interface:
-
-1. A `sink` is initialized. It has op
-
-```julia
-store!(column, elt)
-```
-
-will return `true` if `column` could save `elt`, `false` if it couldn't. In the latter case,
-
-```julia
-newcolumn = extend(column, elt)
-```
-should be used to allocate a new column that
+Julia package for working with (potentially large) columns of data.
