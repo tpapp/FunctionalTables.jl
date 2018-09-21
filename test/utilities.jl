@@ -1,6 +1,5 @@
 # equality operator for unit tests
-≅(a, b) = false
-≅(a::Real, b::Real) = a == b
+≅(a, b) = a == b
 ≅(::Missing, ::Missing) = true
 ≅(a::AbstractVector, b::AbstractVector) = length(a) == length(b) && all(a .≅ b)
 

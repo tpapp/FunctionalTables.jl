@@ -16,15 +16,15 @@ function makesink(cfg::SinkConfig, elt)
     if cfg.useRLE
         RLEVector{typeof(cfg.missingvalue)}(Int8, elt)
     else
-        [elt]
+        [narrow(elt)]
     end
 end
 
-function store!_or_reallocate(::SinkConfig, sink::Vector{T}, elt::S) where {T, S}
-    if cancontain(T, S)
+function store!_or_reallocate(::SinkConfig, sink::Vector{T}, elt) where T
+    if cancontain(T, elt)
         (push!(sink, elt); sink)
     else
-        append1(sink, elt)
+        append1(sink, narrow(elt))
     end
 end
 
@@ -43,11 +43,11 @@ struct RLEVector{C,T,S}
     end
 end
 
-RLEVector{S}(C::Type{<:Signed}, elt) where S = RLEVector{S}(ones(C, 1), [elt])
+RLEVector{S}(C::Type{<:Signed}, elt) where S = RLEVector{S}(ones(C, 1), [narrow(elt)])
 
-function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S}, elt::E) where {C,T,S,E}
+function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S}, elt) where {C,T,S}
     @unpack counts, data = sink
-    if cancontain(T, E)         # can accommodate elt, same sink
+    if cancontain(T, elt)       # can accommodate elt, same sink
         if data[end] == elt && 0 < counts[end] < typemax(C)
             counts[end] += one(C) # increment existing count
         else
@@ -56,7 +56,7 @@ function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S}, elt::E) wher
         end
         sink
     else                        # can't accommodate elt, allocate new sink
-        RLEVector{S}(append1(counts, one(C)), append1(data, elt))
+        RLEVector{S}(append1(counts, one(C)), append1(data, narrow(elt)))
     end
 end
 
