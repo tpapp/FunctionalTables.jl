@@ -1,5 +1,5 @@
-using DataColumns, Test
-using DataColumns: cancontain, narrow, append1 # utilities
+using FunctionalTables, Test
+using FunctionalTables: cancontain, narrow, append1 # utilities
 
 include("utilities.jl")
 

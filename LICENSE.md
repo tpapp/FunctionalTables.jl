@@ -1,4 +1,4 @@
-The DataColumns.jl package is licensed under the MIT "Expat" License:
+The FunctionalTables.jl package is licensed under the MIT "Expat" License:
 
 > Copyright (c) 2018: Tamas K. Papp.
 >

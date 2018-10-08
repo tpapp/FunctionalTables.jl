@@ -1,4 +1,4 @@
-name = "DataColumns"
+name = "FunctionalTables"
 uuid = "3b4ce766-bbfc-11e8-3d5f-4dfe24220420"
 authors = ["Tamas K. Papp <tkpapp@gmail.com>"]
 version = "0.1.0"

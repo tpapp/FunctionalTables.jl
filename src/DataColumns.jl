@@ -1,4 +1,4 @@
-module DataColumns
+module FunctionalTables
 
 using ArgCheck: @argcheck
 using DocStringExtensions: SIGNATURES, TYPEDEF
