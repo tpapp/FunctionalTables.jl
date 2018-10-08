@@ -72,4 +72,4 @@ julia> s((c = 1, b = 2, a = 3, d = 4))
 """
 NamedTupleSplitter(names::Tuple{Vararg{Symbol}}) = NamedTupleSplitter{NamedTuple{names}}()
 
-(::NamedTupleSplitter{K})(nt::NamedTuple) where K = K(nt), Base.structdiff(nt, K)
+@inline (::NamedTupleSplitter{K})(nt::NamedTuple) where K = K(nt), Base.structdiff(nt, K)
