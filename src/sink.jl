@@ -1,4 +1,5 @@
-export SinkConfig, SINKCONFIG, collect_sink, collect_sinks, RLEVector
+export SinkConfig, SINKCONFIG, SINKVECTORS, collect_sink, collect_sinks, RLEVector,
+    contiguous_blocks
 
 struct SinkConfig{M}
     useRLE::Bool
@@ -7,12 +8,31 @@ end
 
 SinkConfig(; useRLE = true, missingvalue = missing) = SinkConfig(useRLE, missingvalue)
 
+"Default sink configuration."
 const SINKCONFIG = SinkConfig(;)
+
+"Sink configuration that collects to vectors."
+const SINKVECTORS = SinkConfig(; useRLE = false)
+
+"""
+$(SIGNATURES)
+
+Make sinks for a (named) tuple pf elements.
+"""
+make_sinks(cfg, elts::Union{Tuple, NamedTuple}) = map(elt -> make_sink(cfg, elt), elts)
+
+"""
+$(SIGNATURES)
+
+Finalize a (named) tuple of sinks.
+"""
+finalize_sinks(cfg, sinks::Union{Tuple, NamedTuple}) =
+    map(sink -> finalize_sink(cfg, sink), sinks)
 
 
 # # Reference implementation for sinks: `Vector`
 
-function makesink(cfg::SinkConfig, elt)
+function make_sink(cfg::SinkConfig, elt)
     if cfg.useRLE
         RLEVector{typeof(cfg.missingvalue)}(Int8, elt)
     else
@@ -28,7 +48,7 @@ function store!_or_reallocate(::SinkConfig, sink::Vector{T}, elt) where T
     end
 end
 
-finalize(::SinkConfig, sink::Vector) = sink
+finalize_sink(::SinkConfig, sink::Vector) = sink
 
 
 # # RLE compressed vector
@@ -70,7 +90,7 @@ function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S}, elt::S) wher
     sink
 end
 
-finalize(::SinkConfig, rle::RLEVector) = rle
+finalize_sink(::SinkConfig, rle::RLEVector) = rle
 
 eltype(::RLEVector{C,T,S}) where {C,T,S} = Base.promote_typejoin(T,S)
 
@@ -101,13 +121,13 @@ function collect_sink(cfg::SinkConfig, itr)
     y = iterate(itr)
     y ≡ nothing && return nothing
     elt, state = y
-    collect_sink!(makesink(cfg::SinkConfig, elt), cfg, itr, state)
+    collect_sink!(make_sink(cfg::SinkConfig, elt), cfg, itr, state)
 end
 
 function collect_sink!(sink, cfg::SinkConfig, itr, state)
     while true
         y = iterate(itr, state)
-        y ≡ nothing && return finalize(cfg, sink)
+        y ≡ nothing && return finalize_sink(cfg, sink)
         elt, state = y
         newsink = store!_or_reallocate(cfg, sink, elt)
         sink ≡ newsink || return collect_sink!(newsink, cfg, itr, state)
@@ -119,16 +139,81 @@ function collect_sinks(cfg::SinkConfig, itr)
     y ≡ nothing && return nothing
     elts, newstate = y
     @argcheck elts isa NamedTuple
-    sinks = map(elt -> makesink(cfg::SinkConfig, elt), elts)
+    sinks = make_sinks(cfg, elts)
     collect_sinks!(sinks, cfg, itr, newstate)
 end
 
 function collect_sinks!(sinks::NamedTuple, cfg, itr, state)
     while true
         y = iterate(itr, state)
-        y ≡ nothing && return map(sink -> finalize(cfg, sink), sinks)
+        y ≡ nothing && return finalize_sinks(cfg, sinks)
         elts, state = y
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
         sinks ≡ newsinks || return collect_sinks!(newsinks, cfg, itr, state)
+    end
+end
+
+"""
+$(TYPEDEF)
+
+Implements [`contiguous_blocks`](@ref).
+
+Iterator state is a tuple, with
+
+1. `sinks` and `firstkey`, created from the element with a non-matching key,
+
+2. `itrstate`, the iteration state for `itr`.
+"""
+struct ContiguousBlockIterator{C, F, T}
+    cfg::C
+    f::F
+    itr::T
+end
+
+IteratorSize(::ContiguousBlockIterator) = Base.SizeUnknown()
+
+IteratorEltype(::ContiguousBlockIterator) = Base.EltypeUnknown()
+
+"""
+$(SIGNATURES)
+
+Return an iterator that maps elements `x` returned by another iterator `itr` with
+
+```julia
+key, elts = f(x)
+```
+
+and returns elements `key => block`, where `block` is a contiguous block of `elts`s for
+which `key` is the same (when compared with `==`). `v`s are expected to be named tuples, and
+collected into sinks which are then finalized.  `cfg` governs this.
+"""
+contiguous_blocks(f, itr; cfg = SINKVECTORS) = ContiguousBlockIterator(cfg, f, itr)
+
+function iterate(b::ContiguousBlockIterator)
+    @unpack cfg, f, itr = b
+    y = iterate(itr)
+    y ≡ nothing && return nothing
+    x, state = y
+    firstkey, elts = f(x)
+    sinks = make_sinks(cfg, elts)
+    _collect_blocks!(sinks, b, firstkey, state)
+end
+
+function iterate(b::ContiguousBlockIterator, state)
+    state ≡ nothing && return nothing
+    sinks, firstkey, itrstate = state
+    _collect_blocks!(sinks, b, firstkey, itrstate)
+end
+
+function _collect_blocks!(sinks::NamedTuple, b::ContiguousBlockIterator, firstkey, state)
+    @unpack cfg, f, itr = b
+    while true
+        y = iterate(itr, state)
+        y ≡ nothing && return firstkey => finalize_sinks(cfg, sinks), nothing
+        x, state = y
+        key, elts = f(x)
+        key == firstkey || return firstkey => finalize_sinks(cfg, sinks), (make_sinks(cfg, elts), key, state)
+        newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
+        sinks ≡ newsinks || return _collect_blocks!(newsinks, b, firstkey, state)
     end
 end

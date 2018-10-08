@@ -1,7 +1,7 @@
 module DataColumns
 
 using ArgCheck: @argcheck
-using DocStringExtensions: SIGNATURES
+using DocStringExtensions: SIGNATURES, TYPEDEF
 using Parameters: @unpack
 
 import Base: length, IteratorSize, IteratorEltype, eltype, iterate
