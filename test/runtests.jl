@@ -70,7 +70,7 @@ end
     @test collect(columns.a) ≅ v
 end
 
-@test "contiguous blocks" begin
+@testset "contiguous blocks" begin
     keycounts = [:a => 10, :b => 17, :c => 19]
     v = mapreduce(((k, c), ) -> [(k, (elt = i,)) for i in 1:c], vcat, keycounts)
     b = contiguous_blocks(identity, v)
