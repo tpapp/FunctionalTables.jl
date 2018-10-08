@@ -34,10 +34,9 @@ end
     @test [1, 1, missing] ≅ a1
 end
 
-
 @testset "collect by names" begin
     itr = [(a = i, b = Float64(i), c = 'a' + i - 1) for i in 1:10]
-    result = collect_sinks(SinkConfig(;useRLE = false), itr)
+    result = collect_columns(SinkConfig(;useRLE = false), itr)
     @test result isa NamedTuple{(:a, :b, :c), Tuple{Vector{Int8}, Vector{Float64}, Vector{Char}}}
     @test result.a ≅ 1:10
     @test result.b ≅ Float64.(1:10)
@@ -46,7 +45,7 @@ end
 
 @testset "simple RLE" begin
     v = vcat(fill(1, 10), fill(missing, 5), fill(2, 20))
-    s = collect_sink(SINKCONFIG, v)
+    s = collect_column(SINKCONFIG, v)
     @test length(s) == 35
     @test eltype(s) ≡ Union{Int8, Missing}
     @test s.data == [1, 2]
@@ -56,7 +55,7 @@ end
 
 @testset "overrun RLE" begin
     v = vcat(fill(1, 300), fill(missing, 5), fill(2, 20), fill(missing, 200))
-    s = collect_sink(SINKCONFIG, v)
+    s = collect_column(SINKCONFIG, v)
     @test length(s) == length(v)
     @test eltype(s) ≡ Union{Int8, Missing}
     @test s.data == [1, 1, 1, 2]
@@ -66,7 +65,7 @@ end
 
 @testset "large collection" begin
     v = randvector(1000)
-    columns = collect_sinks(SINKCONFIG, [(a = a, ) for a in v])
+    columns = collect_columns(SINKCONFIG, [(a = a, ) for a in v])
     @test collect(columns.a) ≅ v
 end
 

@@ -1,11 +1,38 @@
-export SinkConfig, SINKCONFIG, SINKVECTORS, collect_sink, collect_sinks, RLEVector,
-    contiguous_blocks
+export
+    SinkConfig, SINKCONFIG, SINKVECTORS, collect_column, collect_columns,
+    RLEVector, contiguous_blocks
 
+
+# sinks — general interface
+
+# A *sink* is a container that collects elements, expanding as necessary. When the
+# collection is finished, sinks are *finalized* into *columns*. Details are governed by sink
+# configuration objects (see [`SinkConfig`](@ref).
+#
+# Interface for sinks
+#
+# 1. [`make_sink`](@ref) for creating a sink for a single element.
+#
+# 2. [`store_or_reallocate!`](@ref) for saving another element. Either the result is `≡` to
+# the sink in the argument, or a new sink was reallocated (potentially changing type).
+#
+# 3. [`finalize_sink`](@ref) turns the sink into a *column*, which is an iterable with a
+# length and element type, supports `iterate,` but is not necessarily optimized for random
+# access.
+
+"""
+$(TYPEDEF)
+"""
 struct SinkConfig{M}
     useRLE::Bool
     missingvalue::M
 end
 
+"""
+$(SIGNATURES)
+
+Make a sink configuration, using defaults.
+"""
 SinkConfig(; useRLE = true, missingvalue = missing) = SinkConfig(useRLE, missingvalue)
 
 "Default sink configuration."
@@ -13,6 +40,9 @@ const SINKCONFIG = SinkConfig(;)
 
 "Sink configuration that collects to vectors."
 const SINKVECTORS = SinkConfig(; useRLE = false)
+
+
+# helper functions
 
 """
 $(SIGNATURES)
@@ -32,6 +62,11 @@ finalize_sinks(cfg, sinks::Union{Tuple, NamedTuple}) =
 
 # # Reference implementation for sinks: `Vector`
 
+"""
+$(SIGNATURES)
+
+Create and return a sink using configuration `cfg` that stores `elt`.
+"""
 function make_sink(cfg::SinkConfig, elt)
     if cfg.useRLE
         RLEVector{typeof(cfg.missingvalue)}(Int8, elt)
@@ -40,6 +75,13 @@ function make_sink(cfg::SinkConfig, elt)
     end
 end
 
+"""
+$(SIGNATURES)
+
+Either store `elt` in `sink` (in which case the returned value is `≡ sink`), or
+allocate a new sink that can do this, copy the contents, save `elt` and return that (then
+the returned value is `≢ sink`).
+"""
 function store!_or_reallocate(::SinkConfig, sink::Vector{T}, elt) where T
     if cancontain(T, elt)
         (push!(sink, elt); sink)
@@ -48,11 +90,33 @@ function store!_or_reallocate(::SinkConfig, sink::Vector{T}, elt) where T
     end
 end
 
+"""
+$(SIGNATURES)
+
+Convert `sink` to a *column*.
+
+`sink` may share structure with the result and is not supposed to be used for saving any
+more elements.
+"""
 finalize_sink(::SinkConfig, sink::Vector) = sink
 
 
 # # RLE compressed vector
 
+"""
+$(TYPEDEF)
+
+An RLE encoded vector, using negative lengths for missing values.
+
+When an elemenet in `counts` is positive, it encodes that many of the corresponding element
+in `data`.
+
+Negative `counts` encode missing values of type `S` (has to be a concrete singleton). In
+this case there is no corresponding value in `data`, ie `data` may have *fewer elements*
+than `counts`.
+
+An RLEVector can also act as a column.
+"""
 struct RLEVector{C,T,S}
     counts::Vector{C}
     data::Vector{T}
@@ -117,39 +181,51 @@ end
 
 # # Collecting named tuples
 
-function collect_sink(cfg::SinkConfig, itr)
+"""
+$(SIGNATURES)
+
+Collect results from `itr` into a sink (using config `cfg`), then finalize and return the
+column.
+"""
+function collect_column(cfg::SinkConfig, itr)
     y = iterate(itr)
     y ≡ nothing && return nothing
     elt, state = y
-    collect_sink!(make_sink(cfg::SinkConfig, elt), cfg, itr, state)
+    collect_column!(make_sink(cfg::SinkConfig, elt), cfg, itr, state)
 end
 
-function collect_sink!(sink, cfg::SinkConfig, itr, state)
+function collect_column!(sink, cfg::SinkConfig, itr, state)
     while true
         y = iterate(itr, state)
         y ≡ nothing && return finalize_sink(cfg, sink)
         elt, state = y
         newsink = store!_or_reallocate(cfg, sink, elt)
-        sink ≡ newsink || return collect_sink!(newsink, cfg, itr, state)
+        sink ≡ newsink || return collect_column!(newsink, cfg, itr, state)
     end
 end
 
-function collect_sinks(cfg::SinkConfig, itr)
+"""
+$(SIGNATURES)
+
+Collect results from `itr`, which are supposed to be `NamedTuple`s with the same names, into
+sinks (using config `cfg`), then finalize and return the `NamedTuple` of the columns.
+"""
+function collect_columns(cfg::SinkConfig, itr)
     y = iterate(itr)
     y ≡ nothing && return nothing
     elts, newstate = y
     @argcheck elts isa NamedTuple
     sinks = make_sinks(cfg, elts)
-    collect_sinks!(sinks, cfg, itr, newstate)
+    collect_columns!(sinks, cfg, itr, newstate)
 end
 
-function collect_sinks!(sinks::NamedTuple, cfg, itr, state)
+function collect_columns!(sinks::NamedTuple, cfg, itr, state)
     while true
         y = iterate(itr, state)
         y ≡ nothing && return finalize_sinks(cfg, sinks)
         elts, state = y
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
-        sinks ≡ newsinks || return collect_sinks!(newsinks, cfg, itr, state)
+        sinks ≡ newsinks || return collect_columns!(newsinks, cfg, itr, state)
     end
 end
 
@@ -196,24 +272,25 @@ function iterate(b::ContiguousBlockIterator)
     x, state = y
     firstkey, elts = f(x)
     sinks = make_sinks(cfg, elts)
-    _collect_blocks!(sinks, b, firstkey, state)
+    _collect_block!(sinks, b, firstkey, state)
 end
 
 function iterate(b::ContiguousBlockIterator, state)
     state ≡ nothing && return nothing
     sinks, firstkey, itrstate = state
-    _collect_blocks!(sinks, b, firstkey, itrstate)
+    _collect_block!(sinks, b, firstkey, itrstate)
 end
 
-function _collect_blocks!(sinks::NamedTuple, b::ContiguousBlockIterator, firstkey, state)
+function _collect_block!(sinks::NamedTuple, b::ContiguousBlockIterator, firstkey, state)
     @unpack cfg, f, itr = b
     while true
         y = iterate(itr, state)
         y ≡ nothing && return firstkey => finalize_sinks(cfg, sinks), nothing
         x, state = y
         key, elts = f(x)
-        key == firstkey || return firstkey => finalize_sinks(cfg, sinks), (make_sinks(cfg, elts), key, state)
+        key == firstkey || return firstkey =>
+            finalize_sinks(cfg, sinks), (make_sinks(cfg, elts), key, state)
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
-        sinks ≡ newsinks || return _collect_blocks!(newsinks, b, firstkey, state)
+        sinks ≡ newsinks || return _collect_block!(newsinks, b, firstkey, state)
     end
 end
