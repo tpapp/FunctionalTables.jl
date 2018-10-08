@@ -1,5 +1,5 @@
 using FunctionalTables, Test
-using FunctionalTables: cancontain, narrow, append1 # utilities
+using FunctionalTables: cancontain, narrow, append1, NamedTupleSplitter # utilities
 
 include("utilities.jl")
 
@@ -74,4 +74,11 @@ end
     v = mapreduce(((k, c), ) -> [(k, (elt = i,)) for i in 1:c], vcat, keycounts)
     b = contiguous_blocks(identity, v)
     @test collect(b) == map(((k, c),) -> k => (elt = 1:c, ), keycounts)
+end
+
+@testset "splitting named tuples" begin
+    s = NamedTupleSplitter((:a, :c))
+    @test s((a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
+    @test s((c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
+    @test_throws ErrorException s((a = 1, b = 2))
 end

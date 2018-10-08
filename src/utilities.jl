@@ -53,3 +53,23 @@ function append1(v::Vector{T}, elt::S) where {T,S}
     w[end] = elt
     w
 end
+
+struct NamedTupleSplitter{K <: NamedTuple} end
+
+"""
+$(SIGNATURES)
+
+A callable that splits a named tuple into the fields with `names` and the rest.
+
+Returns two `NamedTuple`s; the first one is ordered as `names`, the second one as in the
+original argument.
+```jldoctest
+julia> s = NamedTupleSplitter((:a, :c));
+
+julia> s((c = 1, b = 2, a = 3, d = 4))
+((a = 3, c = 1), (b = 2, d = 4))
+```
+"""
+NamedTupleSplitter(names::Tuple{Vararg{Symbol}}) = NamedTupleSplitter{NamedTuple{names}}()
+
+@inline (::NamedTupleSplitter{K})(nt::NamedTuple) where K = K(nt), Base.structdiff(nt, K)
