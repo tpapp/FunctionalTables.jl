@@ -1,7 +1,15 @@
 # equality operator for unit tests
 ≅(a, b) = a == b
+
 ≅(::Missing, ::Missing) = true
+
 ≅(a::AbstractVector, b::AbstractVector) = length(a) == length(b) && all(a .≅ b)
+
+function ≅(a::FunctionalTable, b::FunctionalTable)
+    keys(a.columns) === keys(b.columns) && a.sorting == b.sorting && a.len == b.len &&
+        all(((ac, bc), ) -> collect(ac) ≅ collect(bc),
+            zip(values(a.columns), values(b.columns)))
+end
 
 function randvector_fs(; range = 1:1000)
     ranl() = rand() < 0.5 ? 1 : rand(range)

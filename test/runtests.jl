@@ -1,5 +1,7 @@
 using FunctionalTables, Test
-using FunctionalTables: cancontain, narrow, append1, NamedTupleSplitter # utilities
+using FunctionalTables:
+    cancontain, narrow, append1, NamedTupleSplitter, # utilities
+    ColumnSort, column_sorting                       # column sorting specs
 
 include("utilities.jl")
 
@@ -81,4 +83,27 @@ end
     @test s((a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
     @test s((c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
     @test_throws ErrorException s((a = 1, b = 2))
+end
+
+@testset "column sorting specifications" begin
+    @test column_sorting((:a, :b => reverse, ColumnSort(:c, false))) ==
+        (ColumnSort(:a, false), ColumnSort(:b, true), ColumnSort(:c, false))
+    @test_throws ArgumentError column_sorting(("foobar", "baz")) # invalid
+    @test_throws ArgumentError column_sorting((:a, :a))          # duplicate
+    @test_throws ArgumentError column_sorting((:a, :a), (:b, ))  # not in set
+end
+
+@testset "FunctionalTable basics and column operations" begin
+    A = 1:10
+    B = 'a':('a'+9)
+    C = Float64.(21:30)
+    ft = FunctionalTable((a = A, b = B, c = C))
+    @test Base.IteratorEltype(ft) ≡ Base.HasEltype()
+    @test eltype(ft) ≡ typeof((a = first(A), b = first(B), c = first(C)))
+    @test Base.IteratorSize(ft) ≡ Base.HasLength()
+    @test length(ft) ≡ length(A)
+    @test keys(ft) == (:a, :b, :c)
+    @test colselect(ft, (:a, :b)) ≅ FunctionalTable((a = A, b = B)) ≅ colselect(ft, :a, :b)
+    @test coldrop(ft, (:a, :b)) ≅ FunctionalTable((c = C,)) ≅ coldrop(ft, :a, :b)
+    @test FunctionalTable(ft) ≅ ft
 end
