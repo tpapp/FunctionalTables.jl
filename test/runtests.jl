@@ -103,7 +103,12 @@ end
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
     @test keys(ft) == (:a, :b, :c)
-    @test colselect(ft, (:a, :b)) ≅ FunctionalTable((a = A, b = B)) ≅ colselect(ft, :a, :b)
-    @test coldrop(ft, (:a, :b)) ≅ FunctionalTable((c = C,)) ≅ coldrop(ft, :a, :b)
+    @test columnselect(ft, (:a, :b)) ≅ FunctionalTable((a = A, b = B)) ≅ columnselect(ft, :a, :b)
+    @test columndrop(ft, (:a, :b)) ≅ FunctionalTable((c = C,)) ≅ columndrop(ft, :a, :b)
     @test FunctionalTable(ft) ≅ ft
+    cols = columns(ft; mutable = true, vector = true)
+    @test all(isa.(values(cols), AbstractVector))
+    @test cols.a == A && cols.a ≢ A
+    @test cols.b == B && cols.b ≢ B
+    @test cols.c == C && cols.c ≢ C
 end

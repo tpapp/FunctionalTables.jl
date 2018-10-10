@@ -1,4 +1,4 @@
-export FunctionalTable, colselect, coldrop
+export FunctionalTable, columns, columnselect, columndrop
 
 """
 $(TYPEDEF)
@@ -73,6 +73,27 @@ eltype(ft::FunctionalTable) = NamedTuple{keys(ft), Tuple{map(eltype, values(ft.c
 """
 $(SIGNATURES)
 
+Return the columns in a `NamedTuple`.
+
+When `mutable`, all columns will be mutable `<: AbstractVector`, and not share (shallow)
+structure.
+
+When `vector`, all columns will be `<: AbstractVector`, but may be immutable or share
+structure.
+"""
+function columns(ft::FunctionalTable; vector = false, mutable = false)
+    map(ft.columns) do c
+        if c isa AbstractVector
+            mutable ? collect(c) : c
+        else
+            (vector | mutable) ? collect(c) : c
+        end
+    end
+end
+
+"""
+$(SIGNATURES)
+
 Create a `FunctionalTable` from either
 
 1. a `NamedTuple` of columns (checked for length),
@@ -98,25 +119,25 @@ $(SIGNATURES)
 
 The table with only the specified columns.
 """
-function colselect(ft::FunctionalTable, keep::Tuple{Vararg{Symbol}})
+function columnselect(ft::FunctionalTable, keep::Tuple{Vararg{Symbol}})
     FunctionalTable(NamedTuple{keep}(ft.columns);
                     sortspecs = tuple(filter(cs -> cs.key ∈ keep, [ft.sorting...])...))
 end
 
-colselect(ft::FunctionalTable, keep::Symbol...) = colselect(ft, keep)
+columnselect(ft::FunctionalTable, keep::Symbol...) = columnselect(ft, keep)
 
 """
 $(SIGNATURES)
 
 The table without the specified columns.
 """
-function coldrop(ft::FunctionalTable, drop::Tuple{Vararg{Symbol}})
+function columndrop(ft::FunctionalTable, drop::Tuple{Vararg{Symbol}})
     ftkeys = keys(ft)
     @assert drop ⊆ ftkeys "Cannot drop keys which are not in the table."
-    colselect(ft, tuple(setdiff(ftkeys, drop)...))
+    columnselect(ft, tuple(setdiff(ftkeys, drop)...))
 end
 
-coldrop(ft::FunctionalTable, drop::Symbol...) = coldrop(ft, drop)
+columndrop(ft::FunctionalTable, drop::Symbol...) = columndrop(ft, drop)
 
 """
 Shows this many values from each column in a `FunctionalTable`.
