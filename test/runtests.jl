@@ -1,9 +1,9 @@
 using FunctionalTables, Test
 using FunctionalTables:
-    cancontain, narrow, append1, NamedTupleSplitter, # utilities
-    ColumnSort, column_sorting                       # column sorting specs
+    cancontain, narrow, append1, NamedTupleSplitter, merge_sorting, # utilities
+    ColumnSort, column_sorting                                      # column sorting specs
 
-include("utilities.jl")
+include("utilities.jl")         # utilities for tests
 
 @testset "narrow" begin
     @test narrow(1) ≡ true
@@ -103,12 +103,49 @@ end
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
     @test keys(ft) == (:a, :b, :c)
-    @test columnselect(ft, (:a, :b)) ≅ FunctionalTable((a = A, b = B)) ≅ columnselect(ft, :a, :b)
-    @test columndrop(ft, (:a, :b)) ≅ FunctionalTable((c = C,)) ≅ columndrop(ft, :a, :b)
+    @test select(ft, (:a, :b)) ≅ FunctionalTable((a = A, b = B)) ≅ select(ft, :a, :b)
+    @test select(ft; drop = (:a, :b)) ≅ FunctionalTable((c = C,))
     @test FunctionalTable(ft) ≅ ft
     cols = columns(ft; mutable = true, vector = true)
     @test all(isa.(values(cols), AbstractVector))
     @test cols.a == A && cols.a ≢ A
     @test cols.b == B && cols.b ≢ B
     @test cols.c == C && cols.c ≢ C
+end
+
+@testset "merge sorting" begin
+    s = column_sorting((:a, :b, :c))
+    @test merge_sorting(s, (:d, :e)) ≡ s
+    @test merge_sorting(s, (:c, :b)) ≡ column_sorting((:a, ))
+    @test merge_sorting(s, (:a, :b, :c)) ≡ ()
+end
+
+@testset "merging" begin
+    A = 1:10
+    B = 'a':('a'+9)
+    C = Float64.(21:30)
+    A2 = .-A
+    ft = FunctionalTable((a = A, b = B); sorting = (:a, :b))
+    @test merge(ft, FunctionalTable((c = C, ))) ≅
+        FunctionalTable((a = A, b = B, c = C); sorting = (:a, :b))
+    @test_throws ArgumentError merge(ft, FunctionalTable((c = C, a = A2)))
+    @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
+        FunctionalTable((a = A2, b = B, c = C); sorting = ())
+end
+
+@testset "map" begin
+    A = 1:10
+    B = 'a':('a'+9)
+    ft = FunctionalTable((a = A, b = B); sorting = (:a, :b))
+    f(row) = (b = row.a + 1, c = row.b + 2)
+    B2 = A .+ 1
+    C = collect(B .+ 2)
+    ft2 = map(f, ft)
+    # NOTE map removes sorting
+    @test ft2 ≅ FunctionalTable((b = B2, c = C); sorting = ())
+    ft3 = merge(ft, f; replace = true)
+    # NOTE as :b is replaced, its sorting is removed
+    @test ft3 ≅ FunctionalTable((a = A, b = B2, c = C); sorting = (:a, ))
+    # overlap, without replacement
+    @test_throws ArgumentError merge(ft, f)
 end

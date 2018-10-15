@@ -1,59 +1,12 @@
-export FunctionalTable, columns, columnselect, columndrop
+export FunctionalTable, columns, select
 
-"""
-$(TYPEDEF)
-
-Sort specification for a column.
-
-Not part of the interface, for internal representation.
-"""
-struct ColumnSort
-    key::Symbol
-    rev::Bool
-end
-
-"""
-$(SIGNATURES)
-
-Process an individual sort specification, called by [`column_sorting`](@ref).
-"""
-column_sort(key::Symbol) = ColumnSort(key, false)
-column_sort(keyrev::Pair{Symbol, typeof(reverse)}) = ColumnSort(first(keyrev), true)
-column_sort(cs::ColumnSort) = cs
-column_sort(x) = throw(ArgumentError("Unrecognized sorting specification $(x)."))
-
-"""
-$(SIGNATURES)
-
-Process sorting specifications for columns.
-
-Verify that sort keys are unique. When `keys` is given, verify that the sort keys are a
-subset of it.
-
-Accepted syntax:
-
-- `:key`, for sorting a column in ascending order
-
-- `:key => reverse`, for sorting a column in descending order
-
-All functions which accept sort specs should use this, but the function itself is not part
-of the API.
-"""
-function column_sorting(sortspecs, keys::Union{Nothing,Tuple{Vararg{Symbol}}} = nothing)
-    sorting = map(column_sort, tuple(sortspecs...))
-    sortkeys = map(c -> c.key, sorting)
-    @argcheck allunique(sortkeys) "Duplicate sort keys."
-    keys ≡ nothing || @argcheck sortkeys ⊆ keys
-    sorting
-end
-
-struct FunctionalTable{C <: NamedTuple, S <: Tuple{Vararg{ColumnSort}}}
+struct FunctionalTable{C <: NamedTuple, S <: Sorting}
     len::Int
     columns::C
     sorting::S
-    function FunctionalTable(columns::C; sortspecs::Tuple = ()) where {C <: NamedTuple}
+    function FunctionalTable(columns::C; sorting::Tuple = ()) where {C <: NamedTuple}
         @argcheck !isempty(columns) "At least one column is needed."
-        sorting = column_sorting(sortspecs, keys(columns))
+        sorting = column_sorting(sorting, keys(columns))
         len = length(first(columns))
         @argcheck all(column -> length(column) == len, Base.tail(values(columns))) #
         new{C, typeof(sorting)}(len, columns, sorting)
@@ -100,44 +53,19 @@ Create a `FunctionalTable` from either
 
 2. an iterable that returns `NamedTuple`s with the same names (but not necessarily types).
 
-`sortspecs` specifies sorting, and is a tuple of `:key` or `:key => reverse` elements.
+`sorting` specifies sorting, and is a tuple of `:key` or `:key => reverse` elements.
 
 `cfg` determines sink configuration for collecting elements of the columns, see
 [`SinkConfig`](@ref).
 """
-FunctionalTable(itr; sortspecs::Tuple = (), cfg::SinkConfig = SINKCONFIG) =
-    FunctionalTable(collect_columns(cfg, itr); sortspecs = sortspecs)
+FunctionalTable(itr; sorting::Tuple = (), cfg::SinkConfig = SINKCONFIG) =
+    FunctionalTable(collect_columns(cfg, itr); sorting = sorting)
 
 function iterate(ft::FunctionalTable, states...)
     ys = map(iterate, ft.columns, states...)
     any(isequal(nothing), ys) && return nothing
     map(first, ys), map(last, ys)
 end
-
-"""
-$(SIGNATURES)
-
-The table with only the specified columns.
-"""
-function columnselect(ft::FunctionalTable, keep::Tuple{Vararg{Symbol}})
-    FunctionalTable(NamedTuple{keep}(ft.columns);
-                    sortspecs = tuple(filter(cs -> cs.key ∈ keep, [ft.sorting...])...))
-end
-
-columnselect(ft::FunctionalTable, keep::Symbol...) = columnselect(ft, keep)
-
-"""
-$(SIGNATURES)
-
-The table without the specified columns.
-"""
-function columndrop(ft::FunctionalTable, drop::Tuple{Vararg{Symbol}})
-    ftkeys = keys(ft)
-    @assert drop ⊆ ftkeys "Cannot drop keys which are not in the table."
-    columnselect(ft, tuple(setdiff(ftkeys, drop)...))
-end
-
-columndrop(ft::FunctionalTable, drop::Symbol...) = columndrop(ft, drop)
 
 """
 Shows this many values from each column in a `FunctionalTable`.
@@ -173,3 +101,60 @@ function show(io::IO, ft::FunctionalTable)
         _showcolcontents(ioc, col)
     end
 end
+
+"""
+$(SIGNATURES)
+select(ft, keep...)
+select(ft; drop)
+
+Select a subset of columns from the table.
+
+`select(ft, keep)` and `select(ft, keep...)` returns the table with the given columns.
+
+`select(ft; drop = keys)` is a convenience form for keeping **all but** the given columns.
+"""
+select(ft::FunctionalTable, keep::Keys) =
+    FunctionalTable(NamedTuple{keep}(ft.columns);
+                    sorting = select_sorting(ft.sorting, keep))
+
+select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
+
+function select(ft::FunctionalTable; drop::Keys)
+    ftkeys = keys(ft)
+    @assert drop ⊆ ftkeys "Cannot drop keys which are not in the table."
+    select(ft, tuple(setdiff(ftkeys, drop)...))
+end
+
+"""
+$(SIGNATURES)
+
+Merge two `FunctionalTable`s.
+
+When `replace == true`, columns in the first one are replaced by second one, otherwise an
+error is thrown if column names overlap.
+"""
+function merge(a::FunctionalTable, b::FunctionalTable; replace = false)
+    @argcheck length(a) == length(b)
+    if !replace
+        dup = tuple((keys(a) ∩ keys(b))...)
+        @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
+    end
+    FunctionalTable(merge(a.columns, b.columns); sorting = merge_sorting(a.sorting, keys(b)))
+end
+
+"""
+$(SIGNATURES)
+"""
+map(f::Callable, ft::FunctionalTable; cfg = SINKCONFIG) =
+    FunctionalTable(imap(f, ft); cfg = cfg)
+
+"""
+$(SIGNATURES)
+
+Map `ft` using `f` by rows, then `merge` the two. See
+[`map(::Callable,::FunctionalTable)`](@ref).
+
+`cfg` is passed to `map`, `replace` governs replacement of overlapping columns in `merge`.
+"""
+merge(ft::FunctionalTable, f::Callable; cfg = SINKCONFIG, replace = false) =
+    merge(ft, map(f, ft; cfg = cfg); replace = replace)
