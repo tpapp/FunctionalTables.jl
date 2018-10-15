@@ -1,4 +1,4 @@
-export FunctionalTable, columns, columnselect, columndrop
+export FunctionalTable, columns, select
 
 struct FunctionalTable{C <: NamedTuple, S <: Sorting}
     len::Int
@@ -104,27 +104,26 @@ end
 
 """
 $(SIGNATURES)
+select(ft, keep...)
+select(ft; drop)
 
-The table with only the specified columns.
+Select a subset of columns from the table.
+
+`select(ft, keep)` and `select(ft, keep...)` returns the table with the given columns.
+
+`select(ft; drop = keys)` is a convenience form for keeping **all but** the given columns.
 """
-columnselect(ft::FunctionalTable, keep::Keys) =
+select(ft::FunctionalTable, keep::Keys) =
     FunctionalTable(NamedTuple{keep}(ft.columns);
                     sorting = select_sorting(ft.sorting, keep))
 
-columnselect(ft::FunctionalTable, keep::Symbol...) = columnselect(ft, keep)
+select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
 
-"""
-$(SIGNATURES)
-
-The table without the specified columns.
-"""
-function columndrop(ft::FunctionalTable, drop::Keys)
+function select(ft::FunctionalTable; drop::Keys)
     ftkeys = keys(ft)
     @assert drop ⊆ ftkeys "Cannot drop keys which are not in the table."
-    columnselect(ft, tuple(setdiff(ftkeys, drop)...))
+    select(ft, tuple(setdiff(ftkeys, drop)...))
 end
-
-columndrop(ft::FunctionalTable, drop::Symbol...) = columndrop(ft, drop)
 
 function merge(a::FunctionalTable, b::FunctionalTable; replace = false)
     @argcheck length(a) == length(b)
