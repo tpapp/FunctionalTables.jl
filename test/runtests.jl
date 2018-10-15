@@ -1,9 +1,9 @@
 using FunctionalTables, Test
 using FunctionalTables:
-    cancontain, narrow, append1, NamedTupleSplitter, # utilities
-    ColumnSort, column_sorting                       # column sorting specs
+    cancontain, narrow, append1, NamedTupleSplitter, merge_sorting, # utilities
+    ColumnSort, column_sorting                                      # column sorting specs
 
-include("utilities.jl")
+include("utilities.jl")         # utilities for tests
 
 @testset "narrow" begin
     @test narrow(1) ≡ true
@@ -111,4 +111,24 @@ end
     @test cols.a == A && cols.a ≢ A
     @test cols.b == B && cols.b ≢ B
     @test cols.c == C && cols.c ≢ C
+end
+
+@testset "merge sorting" begin
+    s = column_sorting((:a, :b, :c))
+    @test merge_sorting(s, (:d, :e)) ≡ s
+    @test merge_sorting(s, (:c, :b)) ≡ column_sorting((:a, ))
+    @test merge_sorting(s, (:a, :b, :c)) ≡ ()
+end
+
+@testset "merging" begin
+    A = 1:10
+    B = 'a':('a'+9)
+    C = Float64.(21:30)
+    A2 = .-A
+    ft = FunctionalTable((a = A, b = B); sorting = (:a, :b))
+    @test merge(ft, FunctionalTable((c = C, ))) ≅
+        FunctionalTable((a = A, b = B, c = C); sorting = (:a, :b))
+    @test_throws ArgumentError merge(ft, FunctionalTable((c = C, a = A2)))
+    @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
+        FunctionalTable((a = A2, b = B, c = C); sorting = ())
 end

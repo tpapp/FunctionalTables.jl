@@ -1,4 +1,9 @@
 """
+Type for keys, used internally.
+"""
+const Keys = Tuple{Vararg{Symbol}}
+
+"""
 $(SIGNATURES)
 
 Test if a collection of element type `T` can contain a new element `elt` without *any* loss
@@ -70,6 +75,6 @@ julia> s((c = 1, b = 2, a = 3, d = 4))
 ((a = 3, c = 1), (b = 2, d = 4))
 ```
 """
-NamedTupleSplitter(names::Tuple{Vararg{Symbol}}) = NamedTupleSplitter{NamedTuple{names}}()
+NamedTupleSplitter(names::Keys) = NamedTupleSplitter{NamedTuple{names}}()
 
 @inline (::NamedTupleSplitter{K})(nt::NamedTuple) where K = K(nt), Base.structdiff(nt, K)
