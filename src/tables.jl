@@ -115,31 +115,6 @@ function iterate(ft::FunctionalTable, states...)
 end
 
 """
-$(SIGNATURES)
-
-The table with only the specified columns.
-"""
-function columnselect(ft::FunctionalTable, keep::Tuple{Vararg{Symbol}})
-    FunctionalTable(NamedTuple{keep}(ft.columns);
-                    sortspecs = tuple(filter(cs -> cs.key ∈ keep, [ft.sorting...])...))
-end
-
-columnselect(ft::FunctionalTable, keep::Symbol...) = columnselect(ft, keep)
-
-"""
-$(SIGNATURES)
-
-The table without the specified columns.
-"""
-function columndrop(ft::FunctionalTable, drop::Tuple{Vararg{Symbol}})
-    ftkeys = keys(ft)
-    @assert drop ⊆ ftkeys "Cannot drop keys which are not in the table."
-    columnselect(ft, tuple(setdiff(ftkeys, drop)...))
-end
-
-columndrop(ft::FunctionalTable, drop::Symbol...) = columndrop(ft, drop)
-
-"""
 Shows this many values from each column in a `FunctionalTable`.
 """
 const SHOWROWS = 5
@@ -173,3 +148,28 @@ function show(io::IO, ft::FunctionalTable)
         _showcolcontents(ioc, col)
     end
 end
+
+"""
+$(SIGNATURES)
+
+The table with only the specified columns.
+"""
+function columnselect(ft::FunctionalTable, keep::Tuple{Vararg{Symbol}})
+    FunctionalTable(NamedTuple{keep}(ft.columns);
+                    sortspecs = tuple(filter(cs -> cs.key ∈ keep, [ft.sorting...])...))
+end
+
+columnselect(ft::FunctionalTable, keep::Symbol...) = columnselect(ft, keep)
+
+"""
+$(SIGNATURES)
+
+The table without the specified columns.
+"""
+function columndrop(ft::FunctionalTable, drop::Tuple{Vararg{Symbol}})
+    ftkeys = keys(ft)
+    @assert drop ⊆ ftkeys "Cannot drop keys which are not in the table."
+    columnselect(ft, tuple(setdiff(ftkeys, drop)...))
+end
+
+columndrop(ft::FunctionalTable, drop::Symbol...) = columndrop(ft, drop)
