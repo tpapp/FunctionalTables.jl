@@ -125,6 +125,14 @@ function select(ft::FunctionalTable; drop::Keys)
     select(ft, tuple(setdiff(ftkeys, drop)...))
 end
 
+"""
+$(SIGNATURES)
+
+Merge two `FunctionalTable`s.
+
+When `replace == true`, columns in the first one are replaced by second one, otherwise an
+error is thrown if column names overlap.
+"""
 function merge(a::FunctionalTable, b::FunctionalTable; replace = false)
     @argcheck length(a) == length(b)
     if !replace
@@ -133,3 +141,20 @@ function merge(a::FunctionalTable, b::FunctionalTable; replace = false)
     end
     FunctionalTable(merge(a.columns, b.columns); sorting = merge_sorting(a.sorting, keys(b)))
 end
+
+"""
+$(SIGNATURES)
+"""
+map(f::Callable, ft::FunctionalTable; cfg = SINKCONFIG) =
+    FunctionalTable(imap(f, ft); cfg = cfg)
+
+"""
+$(SIGNATURES)
+
+Map `ft` using `f` by rows, then `merge` the two. See
+[`map(::Callable,::FunctionalTable)`](@ref).
+
+`cfg` is passed to `map`, `replace` governs replacement of overlapping columns in `merge`.
+"""
+merge(ft::FunctionalTable, f::Callable; cfg = SINKCONFIG, replace = false) =
+    merge(ft, map(f, ft; cfg = cfg); replace = replace)

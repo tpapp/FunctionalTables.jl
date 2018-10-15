@@ -3,8 +3,10 @@ module FunctionalTables
 using ArgCheck: @argcheck
 using DocStringExtensions: SIGNATURES, TYPEDEF
 using Parameters: @unpack
+using IterTools: imap
 
-import Base: length, IteratorSize, IteratorEltype, eltype, iterate, keys, show, merge
+using Base: Callable
+import Base: length, IteratorSize, IteratorEltype, eltype, iterate, keys, show, merge, map
 
 include("utilities.jl")
 include("columns.jl")

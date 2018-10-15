@@ -132,3 +132,20 @@ end
     @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
         FunctionalTable((a = A2, b = B, c = C); sorting = ())
 end
+
+@testset "map" begin
+    A = 1:10
+    B = 'a':('a'+9)
+    ft = FunctionalTable((a = A, b = B); sorting = (:a, :b))
+    f(row) = (b = row.a + 1, c = row.b + 2)
+    B2 = A .+ 1
+    C = collect(B .+ 2)
+    ft2 = map(f, ft)
+    # NOTE map removes sorting
+    @test ft2 ≅ FunctionalTable((b = B2, c = C); sorting = ())
+    ft3 = merge(ft, f; replace = true)
+    # NOTE as :b is replaced, its sorting is removed
+    @test ft3 ≅ FunctionalTable((a = A, b = B2, c = C); sorting = (:a, ))
+    # overlap, without replacement
+    @test_throws ArgumentError merge(ft, f)
+end
