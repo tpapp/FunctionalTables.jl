@@ -6,6 +6,16 @@ const Keys = Tuple{Vararg{Symbol}}
 """
 $(SIGNATURES)
 
+Check that `drop ⊆ ftkeys`, then return `ftkeys ∖ drop`.
+"""
+function dropkeys(ftkeys::Keys, drop::Keys)
+    @assert drop ⊆ ftkeys "Some of keys $(drop) which are not in $(ftkeys)."
+    tuple(setdiff(ftkeys, drop)...)
+end
+
+"""
+$(SIGNATURES)
+
 Test if a collection of element type `T` can contain a new element `elt` without *any* loss
 of precision.
 """

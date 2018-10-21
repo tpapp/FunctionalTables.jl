@@ -119,11 +119,7 @@ select(ft::FunctionalTable, keep::Keys) =
 
 select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
 
-function select(ft::FunctionalTable; drop::Keys)
-    ftkeys = keys(ft)
-    @assert drop ⊆ ftkeys "Cannot drop keys which are not in the table."
-    select(ft, tuple(setdiff(ftkeys, drop)...))
-end
+select(ft::FunctionalTable; drop::Keys) = select(ft, dropkeys(keys(ft), drop))
 
 """
 $(SIGNATURES)
