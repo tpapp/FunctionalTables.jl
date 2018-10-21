@@ -149,3 +149,14 @@ end
     # overlap, without replacement
     @test_throws ArgumentError merge(ft, f)
 end
+
+@testset "groupby" begin
+    A = [1, 1, 1, 2, 2]
+    B = 'a':'e'
+    ft = FunctionalTable((a = A, b = B))
+    itr = groupbykeys((:a, ), ft)
+    @test Base.IteratorSize(itr) ≡ Base.SizeUnknown()
+    result = collect(itr)
+    @test result ≅ [(a = 1, ) => FunctionalTable((b = ['a', 'b', 'c'],)),
+                    (a = 2, ) => FunctionalTable((b = ['d', 'e'],))]
+end

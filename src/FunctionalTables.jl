@@ -12,5 +12,6 @@ include("utilities.jl")
 include("columns.jl")
 include("sorting.jl")
 include("tables.jl")
+include("grouping.jl")
 
 end # module
