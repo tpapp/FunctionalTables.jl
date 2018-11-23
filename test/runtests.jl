@@ -2,6 +2,7 @@ using FunctionalTables, Test
 using FunctionalTables:
     cancontain, narrow, append1, NamedTupleSplitter, merge_sorting, # utilities
     ColumnSort, column_sorting                                      # column sorting specs
+import Tables
 
 include("utilities.jl")         # utilities for tests
 
@@ -148,4 +149,29 @@ end
     @test ft3 ≅ FunctionalTable((a = A, b = B2, c = C); sorting = (:a, ))
     # overlap, without replacement
     @test_throws ArgumentError merge(ft, f)
+end
+
+@testset "groupby" begin
+    A = [1, 1, 1, 2, 2]
+    B = 'a':'e'
+    ft = FunctionalTable((a = A, b = B))
+    itr = groupbykeys((:a, ), ft)
+    @test Base.IteratorSize(itr) ≡ Base.SizeUnknown()
+    result = collect(itr)
+    @test result ≅ [(a = 1, ) => FunctionalTable((b = ['a', 'b', 'c'],)),
+                    (a = 2, ) => FunctionalTable((b = ['d', 'e'],))]
+end
+
+@testset "tables interface" begin
+    cols = (a = 1:10, b = 'a' .+ (1:10))
+    ft = FunctionalTable(cols)
+    # general sanity checks
+    @test Tables.columntable(ft) == cols
+    @test Tables.rowtable(ft) == Tables.rowtable(cols)
+    # detailed API testing
+    @test Tables.istable(ft)
+    @test Tables.rowaccess(ft)
+    @test Tables.schema(Tables.rows(ft)) == Tables.schema(Tables.rows(cols))
+    @test Tables.columnaccess(ft)
+    @test Tables.schema(Tables.columns(ft)) == Tables.schema(Tables.columns(cols))
 end

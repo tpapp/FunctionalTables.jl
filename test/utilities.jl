@@ -1,5 +1,9 @@
+
 # equality operator for unit tests
+
 ≅(a, b) = a == b
+
+≅(a::Pair, b::Pair) = a.first ≅ b.first && a.second ≅ b.second
 
 ≅(::Missing, ::Missing) = true
 
@@ -10,6 +14,9 @@ function ≅(a::FunctionalTable, b::FunctionalTable)
         all(((ac, bc), ) -> collect(ac) ≅ collect(bc),
             zip(values(a.columns), values(b.columns)))
 end
+
+
+# random vectors
 
 function randvector_fs(; range = 1:1000)
     ranl() = rand() < 0.5 ? 1 : rand(range)
