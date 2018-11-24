@@ -12,7 +12,7 @@ import Base: length, IteratorSize, IteratorEltype, eltype, iterate, keys, show, 
 include("utilities.jl")
 include("columns.jl")
 include("sorting.jl")
-include("tables.jl")
+include("functionaltables.jl")
 include("tables-interface.jl")
 include("grouping.jl")
 
