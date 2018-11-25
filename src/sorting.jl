@@ -34,7 +34,7 @@ sortkey(cs::ColumnSort{K}) where {K} = K
 """
 $(SIGNATURES)
 
-Process an individual sort specification, called by [`column_sorting`](@ref).
+Process an individual sort specification, called by [`sorting_sortspecs`](@ref).
 """
 @inline ColumnSort(key::Symbol, rev::Bool = false) = ColumnSort{key, rev}()
 @inline ColumnSort(keyrev::Pair{Symbol, typeof(reverse)}) = ColumnSort(first(keyrev), true)
@@ -67,7 +67,7 @@ Accepted syntax:
 All functions which accept sort specs should use this, but the function itself is not part
 of the API.
 """
-function column_sorting(sortspecs, colkeys::Union{Nothing,Keys} = nothing)
+function sorting_sortspecs(sortspecs, colkeys::Union{Nothing,Keys} = nothing)
     sorting = map(ColumnSort, tuple(sortspecs...))
     sortkeys = sortkey.(sorting)
     @argcheck allunique(sortkeys) "Duplicate sort keys."

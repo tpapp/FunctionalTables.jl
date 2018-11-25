@@ -6,7 +6,7 @@ struct FunctionalTable{C <: NamedTuple, S <: Sorting}
     sorting::S
     function FunctionalTable(columns::C; sorting::Tuple = ()) where {C <: NamedTuple}
         @argcheck !isempty(columns) "At least one column is needed."
-        sorting = column_sorting(sorting, keys(columns))
+        sorting = sorting_sortspecs(sorting, keys(columns))
         len = length(first(columns))
         @argcheck all(column -> length(column) == len, Base.tail(values(columns))) #
         new{C, typeof(sorting)}(len, columns, sorting)

@@ -3,7 +3,7 @@ using FunctionalTables:
     # utilities
     cancontain, narrow, append1, NamedTupleSplitter, merge_sorting,
     # column sorting building blocks
-    ColumnSort, column_sorting, cmp_sorting
+    ColumnSort, sorting_sortspecs, cmp_sorting
 import Tables
 
 include("utilities.jl")         # utilities for tests
@@ -89,11 +89,11 @@ end
 end
 
 @testset "column sorting specifications" begin
-    @test column_sorting((:a, :b => reverse, ColumnSort(:c, false))) ==
+    @test sorting_sortspecs((:a, :b => reverse, ColumnSort(:c, false))) ==
         (ColumnSort(:a, false), ColumnSort(:b, true), ColumnSort(:c, false))
-    @test_throws ArgumentError column_sorting(("foobar", "baz")) # invalid
-    @test_throws ArgumentError column_sorting((:a, :a))          # duplicate
-    @test_throws ArgumentError column_sorting((:a, :a), (:b, ))  # not in set
+    @test_throws ArgumentError sorting_sortspecs(("foobar", "baz")) # invalid
+    @test_throws ArgumentError sorting_sortspecs((:a, :a))          # duplicate
+    @test_throws ArgumentError sorting_sortspecs((:a, :a), (:b, ))  # not in set
 end
 
 @testset "FunctionalTable basics and column operations" begin
@@ -117,9 +117,9 @@ end
 end
 
 @testset "merge sorting" begin
-    s = column_sorting((:a, :b, :c))
+    s = sorting_sortspecs((:a, :b, :c))
     @test merge_sorting(s, (:d, :e)) ≡ s
-    @test merge_sorting(s, (:c, :b)) ≡ column_sorting((:a, ))
+    @test merge_sorting(s, (:c, :b)) ≡ sorting_sortspecs((:a, ))
     @test merge_sorting(s, (:a, :b, :c)) ≡ ()
 end
 
@@ -179,7 +179,7 @@ end
 end
 
 @testset "column sort comparisons" begin
-    sorting = column_sorting((:a, :b => reverse))
+    sorting = sorting_sortspecs((:a, :b => reverse))
     @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (a = 1, b = 2)) == 0
     @test @inferred cmp_sorting(sorting, (a = 1, b = 3), (a = 1, b = 2)) == -1
     @test @inferred cmp_sorting(sorting, (a = 0, b = 3), (a = 1, b = 2)) == -1
