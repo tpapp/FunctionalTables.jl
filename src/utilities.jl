@@ -6,10 +6,29 @@ const Keys = Tuple{Vararg{Symbol}}
 """
 $(SIGNATURES)
 
+Test that `keys` are valid keys of the second argument.
+"""
+validkeys(keys::Keys, ftkeys::Keys) = keys ⊆ ftkeys
+
+"""
+$(SIGNATURES)
+
+Check that `keys` are valid for `obj`.
+
+!!! NOTE
+    Extend `validkeys` for other `obj`, not this method.
+"""
+function checkvalidkeys(keys::Keys, obj)
+    @argcheck validkeys(keys, obj) "Some keys $(keys) which are not valid for this object."
+end
+
+"""
+$(SIGNATURES)
+
 Check that `drop ⊆ ftkeys`, then return `ftkeys ∖ drop`.
 """
 function dropkeys(ftkeys::Keys, drop::Keys)
-    @assert drop ⊆ ftkeys "Some of keys $(drop) which are not in $(ftkeys)."
+    checkvalidkeys(drop, ftkeys)
     tuple(setdiff(ftkeys, drop)...)
 end
 

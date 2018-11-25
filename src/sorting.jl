@@ -1,31 +1,61 @@
+#####
+##### Building blocks for sorting.
+#####
+##### Actual sorting is implemented in sort.jl.
+#####
+
+####
+####
+####
+
 """
 $(TYPEDEF)
 
-Sort specification for a column.
+Sort specification for a column. `K::Symbol` is a key for sorting, `R::Bool` reverses
+sorting for this key.
 
-Not part of the interface, for internal representation.
+This type is *not part of the interface*, for internal representation.
 """
-struct ColumnSort
-    key::Symbol
-    rev::Bool
+struct ColumnSort{K, R}
+    function ColumnSort{K, R}() where {K, R}
+        @argcheck K isa Symbol
+        @argcheck R isa Bool
+        new{K, R}()
+    end
 end
+
+"""
+$(SIGNATURES)
+
+Accessor for sort key. *Internal.*
+"""
+sortkey(cs::ColumnSort{K}) where {K} = K
 
 """
 $(SIGNATURES)
 
 Process an individual sort specification, called by [`column_sorting`](@ref).
 """
-ColumnSort(key::Symbol) = ColumnSort(key, false)
-ColumnSort(keyrev::Pair{Symbol, typeof(reverse)}) = ColumnSort(first(keyrev), true)
-ColumnSort(cs::ColumnSort) = cs
+@inline ColumnSort(key::Symbol, rev::Bool = false) = ColumnSort{key, rev}()
+@inline ColumnSort(keyrev::Pair{Symbol, typeof(reverse)}) = ColumnSort(first(keyrev), true)
+@inline ColumnSort(cs::ColumnSort) = cs
 ColumnSort(x) = throw(ArgumentError("Unrecognized sorting specification $(x)."))
+
+####
+#### `Sorting` type and interface
+####
+
+"""
+Type for sorting, used internally.
+"""
+const Sorting = Tuple{Vararg{ColumnSort}}
 
 """
 $(SIGNATURES)
 
-Process sorting specifications for columns.
+Process sorting specifications for columns, return a value of type `Sorting`.
 
-Verify that sort keys are unique. When `keys` is given, verify that the sort keys are a
+Verify that sort keys are unique. When `colkeys` is given, verify that the sort keys are a
 subset of it.
 
 Accepted syntax:
@@ -37,18 +67,13 @@ Accepted syntax:
 All functions which accept sort specs should use this, but the function itself is not part
 of the API.
 """
-function column_sorting(sortspecs, keys::Union{Nothing,Keys} = nothing)
+function column_sorting(sortspecs, colkeys::Union{Nothing,Keys} = nothing)
     sorting = map(ColumnSort, tuple(sortspecs...))
-    sortkeys = map(c -> c.key, sorting)
+    sortkeys = sortkey.(sorting)
     @argcheck allunique(sortkeys) "Duplicate sort keys."
-    keys ≡ nothing || @argcheck sortkeys ⊆ keys
+    colkeys ≡ nothing || @argcheck sortkeys ⊆ colkeys
     sorting
 end
-
-"""
-Type for sorting, used internally.
-"""
-const Sorting = Tuple{Vararg{ColumnSort}}
 
 """
 $(SIGNATURES)
@@ -57,7 +82,7 @@ Calculate sorting when a table with `sorting` is merged with a table containing 
 which may replace columns.
 """
 function merge_sorting(sorting::Sorting, otherkeys::Keys)
-    firstinvalid = findfirst(s -> s.key ∈ otherkeys, sorting)
+    firstinvalid = findfirst(s -> sortkey(s) ∈ otherkeys, sorting)
     firstinvalid ≡ nothing ? sorting : sorting[1:(firstinvalid-1)]
 end
 
@@ -66,5 +91,38 @@ $(SIGNATURES)
 
 Calculate sorting when only `keep` keys are kept.
 """
-select_sorting(sorting::Sorting, keep::Keys) =
-    tuple(filter(cs -> cs.key ∈ keep, [sorting...])...)
+select_sorting(sorting::Sorting, keep::Keys) = _select_sorting(keep, sorting...)
+
+_select_sorting(keep) = ()
+
+function _select_sorting(keep, cs, rest...)
+    csrest = _select_sorting(keep, rest...)
+    sortkey(cs) ∈ keep ? (cs, csrest...) : csrest
+end
+
+####
+#### Comparisons
+####
+
+
+function cmp_columnsort(cs::ColumnSort{K, R}, a::NamedTuple, b::NamedTuple) where {K, R}
+    cmp(getproperty(a, K), getproperty(b, K)) * (R ? -1 : 1)
+end
+
+"""
+$(SIGNATURES)
+
+Compare `a` and `b`, which support the `getproperty` interface, with the given column
+sorting.
+
+*Internal*.
+"""
+cmp_sorting(sorting::Sorting, a, b) = _cmp_sorting(a, b, sorting...)
+
+_cmp_sorting(a, b) = 0
+
+function _cmp_sorting(a, b, cs::ColumnSort, rest...)
+    r = cmp_columnsort(cs, a, b)
+    r ≠ 0 && return r
+    _cmp_sorting(a, b, rest...)
+end

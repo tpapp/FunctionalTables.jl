@@ -1,7 +1,9 @@
 using FunctionalTables, Test
 using FunctionalTables:
-    cancontain, narrow, append1, NamedTupleSplitter, merge_sorting, # utilities
-    ColumnSort, column_sorting                                      # column sorting specs
+    # utilities
+    cancontain, narrow, append1, NamedTupleSplitter, merge_sorting,
+    # column sorting building blocks
+    ColumnSort, column_sorting, cmp_sorting
 import Tables
 
 include("utilities.jl")         # utilities for tests
@@ -174,4 +176,12 @@ end
     @test Tables.schema(Tables.rows(ft)) == Tables.schema(Tables.rows(cols))
     @test Tables.columnaccess(ft)
     @test Tables.schema(Tables.columns(ft)) == Tables.schema(Tables.columns(cols))
+end
+
+@testset "column sort comparisons" begin
+    sorting = column_sorting((:a, :b => reverse))
+    @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (a = 1, b = 2)) == 0
+    @test @inferred cmp_sorting(sorting, (a = 1, b = 3), (a = 1, b = 2)) == -1
+    @test @inferred cmp_sorting(sorting, (a = 0, b = 3), (a = 1, b = 2)) == -1
+    @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (b = 2, a = 1)) == 0 # order irrelevant
 end

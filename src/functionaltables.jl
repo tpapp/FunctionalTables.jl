@@ -15,6 +15,8 @@ end
 
 keys(ft::FunctionalTable) = keys(ft.columns)
 
+validkeys(keys_::Keys, ft::FunctionalTable) = validkeys(keys_, keys(ft))
+
 IteratorSize(::FunctionalTable) = Base.HasLength()
 
 length(ft::FunctionalTable) = ft.len
