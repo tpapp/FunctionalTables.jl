@@ -41,6 +41,8 @@ Process an individual sort specification, called by [`sorting_sortspecs`](@ref).
 @inline ColumnSort(cs::ColumnSort) = cs
 ColumnSort(x) = throw(ArgumentError("Unrecognized sorting specification $(x)."))
 
+show(io::IO, cs::ColumnSort{K, R}) where {K, R} = print(io, R ? "↓" : "↑", K)
+
 ####
 #### `Sorting` type and interface
 ####

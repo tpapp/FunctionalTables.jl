@@ -93,7 +93,7 @@ function show(io::IO, ft::FunctionalTable)
         print(io, "sorted ")
         for (i, cs) in enumerate(sorting)
             i > 1 && print(io, ",")
-            print(io, cs.rev ? "↓" : "↑", cs.key)
+            print(io, cs)
         end
     end
     ioc = IOContext(io, :compact => true)

@@ -185,3 +185,13 @@ end
     @test @inferred cmp_sorting(sorting, (a = 0, b = 3), (a = 1, b = 2)) == -1
     @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (b = 2, a = 1)) == 0 # order irrelevant
 end
+
+@testset "sort" begin
+    ft = FunctionalTable((a = [1, -1, 3, 1, 2],
+                          b = [2, 2, 1, 2, 2],
+                          c = 1:5))
+    sft = sort(ft, (:b, :a => reverse))
+    @test sft ≅ FunctionalTable((a = [3, 2, 1, 1, -1],
+                                 b = [1, 2, 2, 2, 2],
+                                 c = [3, 5, 1, 4, 2]); sorting = (:b, :a => reverse))
+end
