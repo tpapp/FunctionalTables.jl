@@ -3,7 +3,7 @@ module FunctionalTables
 using ArgCheck: @argcheck
 using DocStringExtensions: SIGNATURES, TYPEDEF
 using Parameters: @unpack
-using IterTools: imap
+using IterTools: @ifsomething, imap
 import Tables
 
 using Base: Callable

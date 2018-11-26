@@ -1,7 +1,8 @@
 using FunctionalTables, Test
+using FunctionalTables: groupby
 using FunctionalTables:
     # utilities
-    cancontain, narrow, append1, NamedTupleSplitter, merge_sorting,
+    cancontain, narrow, append1, split_namedtuple, merge_sorting,
     # column sorting building blocks
     ColumnSort, sorting_sortspecs, cmp_sorting
 import Tables
@@ -74,18 +75,11 @@ end
     @test collect(columns.a) ≅ v
 end
 
-@testset "contiguous blocks" begin
-    keycounts = [:a => 10, :b => 17, :c => 19]
-    v = mapreduce(((k, c), ) -> [(k, (elt = i,)) for i in 1:c], vcat, keycounts)
-    b = contiguous_blocks(identity, v)
-    @test collect(b) == map(((k, c),) -> k => (elt = 1:c, ), keycounts)
-end
-
 @testset "splitting named tuples" begin
-    s = NamedTupleSplitter((:a, :c))
-    @test s((a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
-    @test s((c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
-    @test_throws ErrorException s((a = 1, b = 2))
+    s = NamedTuple{(:a, :c)}
+    @test split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
+    @test split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
+    @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
 end
 
 @testset "column sorting specifications" begin
@@ -153,15 +147,25 @@ end
     @test_throws ArgumentError merge(ft, f)
 end
 
-@testset "groupby" begin
+@testset "groupby 1" begin
+    keycounts = [:a => 10, :b => 17, :c => 19]
+    ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i) for i in 1:c], vcat, keycounts))
+    g = groupby((:sym, ), ft)
+    cg = collect(g)
+    for (i, (s, c)) in enumerate(keycounts)
+        @test FunctionalTable(cg[i]) ≅ FunctionalTable((sym = fill(s, c), val = 1:c))
+    end
+end
+
+@testset "groupby 2" begin
     A = [1, 1, 1, 2, 2]
     B = 'a':'e'
     ft = FunctionalTable((a = A, b = B))
-    itr = groupbykeys((:a, ), ft)
-    @test Base.IteratorSize(itr) ≡ Base.SizeUnknown()
-    result = collect(itr)
-    @test result ≅ [(a = 1, ) => FunctionalTable((b = ['a', 'b', 'c'],)),
-                    (a = 2, ) => FunctionalTable((b = ['d', 'e'],))]
+    g = groupby((:a, ), ft)
+    @test Base.IteratorSize(g) ≡ Base.SizeUnknown()
+    result = collect(g)
+    @test result ≅ [GroupedTable((a = 1, ), FunctionalTable((b = ['a', 'b', 'c'],))),
+                    GroupedTable((a = 2, ), FunctionalTable((b = ['d', 'e'],)))]
 end
 
 @testset "tables interface" begin

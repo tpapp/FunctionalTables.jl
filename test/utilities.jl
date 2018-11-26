@@ -1,5 +1,6 @@
-
-# equality operator for unit tests
+####
+#### equality operator for unit tests
+####
 
 ≅(a, b) = a == b
 
@@ -15,8 +16,11 @@ function ≅(a::FunctionalTable, b::FunctionalTable)
             zip(values(a.columns), values(b.columns)))
 end
 
-
-# random vectors
+≅(a::GroupedTable, b::GroupedTable) = (a.grouping ≡ b.grouping) && (a.ft ≅ b.ft)
+
+####
+#### random vectors
+####
 
 function randvector_fs(; range = 1:1000)
     ranl() = rand() < 0.5 ? 1 : rand(range)

@@ -25,6 +25,8 @@ IteratorEltype(::FunctionalTable) = Base.HasEltype()
 
 eltype(ft::FunctionalTable) = NamedTuple{keys(ft), Tuple{map(eltype, values(ft.columns))...}}
 
+getsorting(ft::FunctionalTable) = ft.sorting
+
 """
 $(SIGNATURES)
 
