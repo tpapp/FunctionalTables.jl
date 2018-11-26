@@ -1,9 +1,31 @@
-export groupbykeys
+export groupby, GroupedTable
+
+"""
+$(TYPEDEF)
+"""
+struct GroupedTable{K <: NamedTuple, T <: FunctionalTable}
+    grouping::K
+    ft::T
+end
+
+function FunctionalTable(g::GroupedTable)
+    @unpack grouping, ft = g
+    len = length(ft)
+    groupcols = NamedTuple{keys(grouping)}(Iterators.repeated(c, len) for c in values(grouping))
+    FunctionalTable(merge(groupcols, ft.columns))
+end
+
+## FIXME: is direct iteration needed?
+# function iterate(g::GroupedTable, state...)
+#     @unpack grouping, ft = groupedblock
+#     row, state = @ifsomething iterate(ft, state...)
+#     merge(grouping, row), state
+# end
 
 """
 $(TYPEDEF)
 
-Implements [`contiguous_blocks`](@ref).
+Implements [`groupby`](@ref).
 
 Iterator state is a tuple, with
 
@@ -11,69 +33,49 @@ Iterator state is a tuple, with
 
 2. `itrstate`, the iteration state for `itr`.
 """
-struct ContiguousBlockIterator{C, F, T}
+struct GroupedBlocks{K, T, C}
+    ft::T
     cfg::C
-    f::F
-    itr::T
 end
 
-IteratorSize(::Type{<:ContiguousBlockIterator}) = Base.SizeUnknown()
+IteratorSize(::Type{<:GroupedBlocks}) = Base.SizeUnknown()
 
-IteratorEltype(::Type{<:ContiguousBlockIterator}) = Base.EltypeUnknown()
+# FIXME type is known to a certain extent, as a subtype of GroupedBlock
+IteratorEltype(::Type{<:GroupedBlocks}) = Base.EltypeUnknown()
+
+getsorting(g::GroupedBlocks{K}) where K = select_sorting(getsorting(g.ft), K)
 
 """
 $(SIGNATURES)
-
-Return an iterator that maps elements `x` returned by another iterator `itr` with
-
-```julia
-key, elts = f(x)
-```
-
-and returns elements `key => block`, where `block` is a contiguous block of `elts`s for
-which `key` is the same (when compared with `==`). `v`s are expected to be named tuples, and
-collected into sinks which are then finalized.  `cfg` governs this.
 """
-contiguous_blocks(f, itr; cfg = SINKVECTORS) = ContiguousBlockIterator(cfg, f, itr)
+function groupby(ft::FunctionalTable, groupkeys::Keys; cfg = SINKVECTORS)
+    checkvalidkeys(groupkeys, ft)
+    GroupedBlocks{groupkeys, typeof(ft), typeof(cfg)}(ft, cfg)
+end
 
-function iterate(b::ContiguousBlockIterator)
-    @unpack cfg, f, itr = b
-    y = iterate(itr)
-    y ≡ nothing && return nothing
-    x, state = y
-    firstkey, elts = f(x)
+function iterate(g::GroupedBlocks{K}) where K
+    @unpack ft, cfg = g
+    row, itrstate = @ifsomething iterate(ft)
+    firstkey, elts = split_namedtuple(NamedTuple{K}, row)
     sinks = make_sinks(cfg, elts)
-    _collect_block!(sinks, b, firstkey, state)
+    _collect_block!(sinks, g, firstkey, itrstate)
 end
 
-function iterate(b::ContiguousBlockIterator, state)
-    state ≡ nothing && return nothing
-    sinks, firstkey, itrstate = state
-    _collect_block!(sinks, b, firstkey, itrstate)
+function iterate(g::GroupedBlocks, state)
+    sinks, firstkey, itrstate = @ifsomething state
+    _collect_block!(sinks, g, firstkey, itrstate)
 end
 
-function _collect_block!(sinks::NamedTuple, b::ContiguousBlockIterator, firstkey, state)
-    @unpack cfg, f, itr = b
+function _collect_block!(sinks::NamedTuple, g::GroupedBlocks{K}, firstkey, state) where {K}
+    @unpack ft, cfg = g
+    _grouped() = GroupedTable(firstkey, FunctionalTable(finalize_sinks(cfg, sinks)))
     while true
-        y = iterate(itr, state)
-        y ≡ nothing && return firstkey => finalize_sinks(cfg, sinks), nothing
-        x, state = y
-        key, elts = f(x)
-        key == firstkey || return firstkey =>
-            finalize_sinks(cfg, sinks), (make_sinks(cfg, elts), key, state)
+        y = iterate(ft, state)
+        y ≡ nothing && return _grouped(), nothing
+        row, state = y
+        key, elts = split_namedtuple(NamedTuple{K}, row)
+        key == firstkey || return _grouped(), (make_sinks(cfg, elts), key, state)
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
-        sinks ≡ newsinks || return _collect_block!(newsinks, b, firstkey, state)
+        sinks ≡ newsinks || return _collect_block!(newsinks, g, firstkey, state)
     end
-end
-
-"""
-$(SIGNATURES)
-
-Return an iterator that returns `keys => functionaltable` pairs of rows which have the same
-fields selected by `groupkeys` (which then form `keys`).
-"""
-function groupbykeys(groupkeys::Keys, itr; sorting = (), cfg = SINKVECTORS)
-    splitter = NamedTupleSplitter(groupkeys)
-    imap(((k, cols),) -> k => FunctionalTable(cols; sorting = sorting),
-         contiguous_blocks(splitter, itr; cfg = cfg))
 end

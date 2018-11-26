@@ -1,7 +1,10 @@
 using FunctionalTables, Test
+using FunctionalTables: aggregate, groupby
 using FunctionalTables:
-    cancontain, narrow, append1, NamedTupleSplitter, merge_sorting, # utilities
-    ColumnSort, column_sorting                                      # column sorting specs
+    # utilities
+    cancontain, narrow, append1, split_namedtuple, merge_sorting,
+    # column sorting building blocks
+    ColumnSort, sorting_sortspecs, cmp_sorting
 import Tables
 
 include("utilities.jl")         # utilities for tests
@@ -72,26 +75,19 @@ end
     @test collect(columns.a) ≅ v
 end
 
-@testset "contiguous blocks" begin
-    keycounts = [:a => 10, :b => 17, :c => 19]
-    v = mapreduce(((k, c), ) -> [(k, (elt = i,)) for i in 1:c], vcat, keycounts)
-    b = contiguous_blocks(identity, v)
-    @test collect(b) == map(((k, c),) -> k => (elt = 1:c, ), keycounts)
-end
-
 @testset "splitting named tuples" begin
-    s = NamedTupleSplitter((:a, :c))
-    @test s((a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
-    @test s((c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
-    @test_throws ErrorException s((a = 1, b = 2))
+    s = NamedTuple{(:a, :c)}
+    @test split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
+    @test split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
+    @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
 end
 
 @testset "column sorting specifications" begin
-    @test column_sorting((:a, :b => reverse, ColumnSort(:c, false))) ==
+    @test sorting_sortspecs((:a, :b => reverse, ColumnSort(:c, false))) ==
         (ColumnSort(:a, false), ColumnSort(:b, true), ColumnSort(:c, false))
-    @test_throws ArgumentError column_sorting(("foobar", "baz")) # invalid
-    @test_throws ArgumentError column_sorting((:a, :a))          # duplicate
-    @test_throws ArgumentError column_sorting((:a, :a), (:b, ))  # not in set
+    @test_throws ArgumentError sorting_sortspecs(("foobar", "baz")) # invalid
+    @test_throws ArgumentError sorting_sortspecs((:a, :a))          # duplicate
+    @test_throws ArgumentError sorting_sortspecs((:a, :a), (:b, ))  # not in set
 end
 
 @testset "FunctionalTable basics and column operations" begin
@@ -115,9 +111,9 @@ end
 end
 
 @testset "merge sorting" begin
-    s = column_sorting((:a, :b, :c))
+    s = sorting_sortspecs((:a, :b, :c))
     @test merge_sorting(s, (:d, :e)) ≡ s
-    @test merge_sorting(s, (:c, :b)) ≡ column_sorting((:a, ))
+    @test merge_sorting(s, (:c, :b)) ≡ sorting_sortspecs((:a, ))
     @test merge_sorting(s, (:a, :b, :c)) ≡ ()
 end
 
@@ -151,15 +147,25 @@ end
     @test_throws ArgumentError merge(ft, f)
 end
 
-@testset "groupby" begin
+@testset "groupby 1" begin
+    keycounts = [:a => 10, :b => 17, :c => 19]
+    ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i) for i in 1:c], vcat, keycounts))
+    g = groupby(ft, (:sym, ))
+    cg = collect(g)
+    for (i, (s, c)) in enumerate(keycounts)
+        @test FunctionalTable(cg[i]) ≅ FunctionalTable((sym = fill(s, c), val = 1:c))
+    end
+end
+
+@testset "groupby 2" begin
     A = [1, 1, 1, 2, 2]
     B = 'a':'e'
     ft = FunctionalTable((a = A, b = B))
-    itr = groupbykeys((:a, ), ft)
-    @test Base.IteratorSize(itr) ≡ Base.SizeUnknown()
-    result = collect(itr)
-    @test result ≅ [(a = 1, ) => FunctionalTable((b = ['a', 'b', 'c'],)),
-                    (a = 2, ) => FunctionalTable((b = ['d', 'e'],))]
+    g = groupby(ft, (:a, ))
+    @test Base.IteratorSize(g) ≡ Base.SizeUnknown()
+    result = collect(g)
+    @test result ≅ [GroupedTable((a = 1, ), FunctionalTable((b = ['a', 'b', 'c'],))),
+                    GroupedTable((a = 2, ), FunctionalTable((b = ['d', 'e'],)))]
 end
 
 @testset "tables interface" begin
@@ -174,4 +180,38 @@ end
     @test Tables.schema(Tables.rows(ft)) == Tables.schema(Tables.rows(cols))
     @test Tables.columnaccess(ft)
     @test Tables.schema(Tables.columns(ft)) == Tables.schema(Tables.columns(cols))
+end
+
+@testset "column sort comparisons" begin
+    sorting = sorting_sortspecs((:a, :b => reverse))
+    @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (a = 1, b = 2)) == 0
+    @test @inferred cmp_sorting(sorting, (a = 1, b = 3), (a = 1, b = 2)) == -1
+    @test @inferred cmp_sorting(sorting, (a = 0, b = 3), (a = 1, b = 2)) == -1
+    @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (b = 2, a = 1)) == 0 # order irrelevant
+end
+
+@testset "sort" begin
+    ft = FunctionalTable((a = [1, -1, 3, 1, 2],
+                          b = [2, 2, 1, 2, 2],
+                          c = 1:5))
+    sft = sort(ft, (:b, :a => reverse))
+    @test sft ≅ FunctionalTable((a = [3, 2, 1, 1, -1],
+                                 b = [1, 2, 2, 2, 2],
+                                 c = [3, 5, 1, 4, 2]); sorting = (:b, :a => reverse))
+end
+
+@testset "aggregation" begin
+    a = [1, 1, 1, 2, 2]
+    b = 1:5
+    ft = FunctionalTable((a = a, b = b); sorting = (:a, :b))
+    A = (a = sum(a), b = sum(b))
+    @test aggregate(ft, (a = sum, b = sum)) == A
+    @test aggregate(ft, Dict(:a => sum, :b => sum)) == A
+    @test aggregate(ft, (b = sum, a = sum)) == A
+    @test_throws ErrorException aggregate(ft, (a = sum, )) == A
+
+    g = groupby(ft, (:a, ))
+    g1 = first(g)
+    @test aggregate(g1, (b = sum, )) ≅ GroupedTable((a = 1, ), FunctionalTable((b = [6],)))
+    @test aggregate(g, (b = sum, )) ≅ FunctionalTable((a = [1, 2], b = [6, 9]); sorting = (:a, ))
 end

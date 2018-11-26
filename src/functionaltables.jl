@@ -6,7 +6,7 @@ struct FunctionalTable{C <: NamedTuple, S <: Sorting}
     sorting::S
     function FunctionalTable(columns::C; sorting::Tuple = ()) where {C <: NamedTuple}
         @argcheck !isempty(columns) "At least one column is needed."
-        sorting = column_sorting(sorting, keys(columns))
+        sorting = sorting_sortspecs(sorting, keys(columns))
         len = length(first(columns))
         @argcheck all(column -> length(column) == len, Base.tail(values(columns))) #
         new{C, typeof(sorting)}(len, columns, sorting)
@@ -15,6 +15,8 @@ end
 
 keys(ft::FunctionalTable) = keys(ft.columns)
 
+validkeys(keys_::Keys, ft::FunctionalTable) = validkeys(keys_, keys(ft))
+
 IteratorSize(::FunctionalTable) = Base.HasLength()
 
 length(ft::FunctionalTable) = ft.len
@@ -22,6 +24,8 @@ length(ft::FunctionalTable) = ft.len
 IteratorEltype(::FunctionalTable) = Base.HasEltype()
 
 eltype(ft::FunctionalTable) = NamedTuple{keys(ft), Tuple{map(eltype, values(ft.columns))...}}
+
+getsorting(ft::FunctionalTable) = ft.sorting
 
 """
 $(SIGNATURES)
@@ -91,7 +95,7 @@ function show(io::IO, ft::FunctionalTable)
         print(io, "sorted ")
         for (i, cs) in enumerate(sorting)
             i > 1 && print(io, ",")
-            print(io, cs.rev ? "↓" : "↑", cs.key)
+            print(io, cs)
         end
     end
     ioc = IOContext(io, :compact => true)
