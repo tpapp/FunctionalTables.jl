@@ -1,5 +1,5 @@
 using FunctionalTables, Test
-using FunctionalTables: groupby
+using FunctionalTables: aggregate, groupby
 using FunctionalTables:
     # utilities
     cancontain, narrow, append1, split_namedtuple, merge_sorting,
@@ -198,4 +198,20 @@ end
     @test sft ≅ FunctionalTable((a = [3, 2, 1, 1, -1],
                                  b = [1, 2, 2, 2, 2],
                                  c = [3, 5, 1, 4, 2]); sorting = (:b, :a => reverse))
+end
+
+@testset "aggregation" begin
+    a = [1, 1, 1, 2, 2]
+    b = 1:5
+    ft = FunctionalTable((a = a, b = b); sorting = (:a, :b))
+    A = (a = sum(a), b = sum(b))
+    @test aggregate(ft, (a = sum, b = sum)) == A
+    @test aggregate(ft, Dict(:a => sum, :b => sum)) == A
+    @test aggregate(ft, (b = sum, a = sum)) == A
+    @test_throws ErrorException aggregate(ft, (a = sum, )) == A
+
+    g = groupby(ft, (:a, ))
+    g1 = first(g)
+    @test aggregate(g1, (b = sum, )) ≅ GroupedTable((a = 1, ), FunctionalTable((b = [6],)))
+    @test aggregate(g, (b = sum, )) ≅ FunctionalTable((a = [1, 2], b = [6, 9]); sorting = (:a, ))
 end
