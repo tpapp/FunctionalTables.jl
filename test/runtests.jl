@@ -150,7 +150,7 @@ end
 @testset "groupby 1" begin
     keycounts = [:a => 10, :b => 17, :c => 19]
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i) for i in 1:c], vcat, keycounts))
-    g = groupby((:sym, ), ft)
+    g = groupby(ft, (:sym, ))
     cg = collect(g)
     for (i, (s, c)) in enumerate(keycounts)
         @test FunctionalTable(cg[i]) ≅ FunctionalTable((sym = fill(s, c), val = 1:c))
@@ -161,7 +161,7 @@ end
     A = [1, 1, 1, 2, 2]
     B = 'a':'e'
     ft = FunctionalTable((a = A, b = B))
-    g = groupby((:a, ), ft)
+    g = groupby(ft, (:a, ))
     @test Base.IteratorSize(g) ≡ Base.SizeUnknown()
     result = collect(g)
     @test result ≅ [GroupedTable((a = 1, ), FunctionalTable((b = ['a', 'b', 'c'],))),
