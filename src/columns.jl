@@ -205,26 +205,44 @@ function collect_column!(sink, cfg::SinkConfig, itr, state)
 end
 
 """
-$(SIGNATURES)
+columns, sorting = $(SIGNATURES)
 
 Collect results from `itr`, which are supposed to be `NamedTuple`s with the same names, into
-sinks (using config `cfg`), then finalize and return the `NamedTuple` of the columns.
+sinks (using config `cfg`), then finalize and return the `NamedTuple` of the columns and the
+sorting (which is `≡ sorting` unless `sortingpolicy ≡ SortingPolicy(:prefix)`).
+
+`sorting` is ignored when `sortingpolicy ≡ SortingPolicy(:accept)`, otherwise used according
+to the value of the latter.
 """
-function collect_columns(cfg::SinkConfig, itr)
-    y = iterate(itr)
-    y ≡ nothing && return nothing
-    elts, newstate = y
+function collect_columns(cfg::SinkConfig, itr, sorting::ColumnSorting,
+                         sortingpolicy::SortingPolicy{K}) where K
+    elts, state = @ifsomething iterate(itr)
     @argcheck elts isa NamedTuple
     sinks = make_sinks(cfg, elts)
-    collect_columns!(sinks, cfg, itr, newstate)
+    collect_columns!(sinks, cfg, itr, sorting, sortingpolicy, K ≡ :accept ? () : elts, state)
 end
 
-function collect_columns!(sinks::NamedTuple, cfg, itr, state)
+function collect_columns!(sinks::NamedTuple, cfg, itr,
+                          sorting, sorting_policy::SortingPolicy{K}, lastelts,
+                          state) where K
     while true
         y = iterate(itr, state)
-        y ≡ nothing && return finalize_sinks(cfg, sinks)
+        y ≡ nothing && return finalize_sinks(cfg, sinks), sorting
         elts, state = y
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
-        sinks ≡ newsinks || return collect_columns!(newsinks, cfg, itr, state)
+        if K ≢ :accept
+            if cmp_sorting(sorting, lastelts, elts) > 0
+                if K ≡ :verify
+                    error("Sorting $(sorting) violated: $(lastelts) ≰ $(elts).")
+                else # K ≡ :partial
+                    return collect_columns!(newsinks, cfg, itr,
+                                            retained_sorting(sorting, lastelts, elts),
+                                            sortingpolicy, elts, state)
+                end
+            end
+            lastelts = elts
+        end
+        sinks ≡ newsinks || return collect_columns!(newsinks, cfg, itr, sorting,
+                                                    sorting_policy, lastelts, state)
     end
 end

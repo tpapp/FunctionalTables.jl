@@ -35,6 +35,6 @@ aggregate(gt::GroupedTable, aggregators) =
 function aggregate(g::GroupedBlocks{K}, aggregators) where K
     @unpack ft, cfg = g
     a = conformable_aggregators(dropkeys(keys(ft), K), aggregators)
-    FunctionalTable(Iterators.flatten(imap(gb -> FunctionalTable(aggregate(gb, a)), g));
-                    sorting = getsorting(g), cfg = cfg)
+    FunctionalTable(Iterators.flatten(imap(gb -> FunctionalTable(aggregate(gb, a)), g)),
+                    getsorting(g), SORTING_PREFIX, cfg = cfg)
 end
