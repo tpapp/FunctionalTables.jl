@@ -4,7 +4,7 @@ using FunctionalTables:
     # utilities
     cancontain, narrow, append1, split_namedtuple, merge_sorting,
     # column sorting building blocks
-    ColumnSort, sorting_sortspecs, cmp_sorting
+    ColumnSort, sorting_sortspecs, cmp_sorting, retained_sorting
 import Tables
 
 include("utilities.jl")         # utilities for tests
@@ -88,6 +88,14 @@ end
     @test_throws ArgumentError sorting_sortspecs(("foobar", "baz")) # invalid
     @test_throws ArgumentError sorting_sortspecs((:a, :a))          # duplicate
     @test_throws ArgumentError sorting_sortspecs((:a, :a), (:b, ))  # not in set
+end
+
+@testset "retained sorting" begin
+    s = sorting_sortspecs((:a, :b => reverse))
+    row = (a = 1, b = 2, c = 3)
+    @test retained_sorting(s, row, row) ≡ s
+    @test retained_sorting(s, row, (a = 2, b = 1, c = -1)) ≡ s
+    @test retained_sorting(s, row, (a = 2, b = 3, c = -1)) ≡ sorting_sortspecs((:a, ))
 end
 
 @testset "FunctionalTable basics and column operations" begin

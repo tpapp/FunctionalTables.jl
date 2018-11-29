@@ -128,3 +128,20 @@ function _cmp_sorting(a, b, cs::ColumnSort, rest...)
     r ≠ 0 && return r
     _cmp_sorting(a, b, rest...)
 end
+
+"""
+$(SIGNATURES)
+
+Return the part of `sorting` under which `a ≤ b`.
+"""
+retained_sorting(sorting::Sorting, a, b) = _retained_sorting(a, b, sorting...)
+
+_retained_sorting(a, b) = ()
+
+function _retained_sorting(a, b, cs::ColumnSort, rest...)
+    if cmp_columnsort(cs, a, b) ≤ 0
+        (cs, _retained_sorting(a, b, rest...)...)
+    else
+        ()
+    end
+end
