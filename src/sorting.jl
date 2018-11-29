@@ -64,10 +64,7 @@ function show(io::IO, cs::ColumnSorting)
         print(io, "no sorting")
     else
         print(io, "sorting ")
-        for (i, cs) in enumerate(sorting)
-            i > 1 && print(io, ",")
-            print(io, cs)
-        end
+        join(io, sorting, " ")
     end
 end
 
