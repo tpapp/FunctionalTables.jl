@@ -245,13 +245,18 @@ end
 
 @testset "corner cases for collecting and sorting" begin
     A = (a = 1, )
+    AA = [A, A]
 
     # different keys by row
     @test_throws ArgumentError FunctionalTable([A, (a = 1, b = 2)])
 
     # field specified by sorting is missing
-    @test_throws ErrorException FunctionalTable([A, A], (:b, ))
+    @test_throws ErrorException FunctionalTable(AA, (:b, ))
 
     # prefix narrows sorting silently
-    @test FunctionalTable([A, A], (:b, ), SORTING_PREFIX) ≅ FunctionalTable([A, A])
+    @test FunctionalTable(AA, (:b, ), SORTING_PREFIX) ≅ FunctionalTable(AA)
+
+    # sorting keys not contained in columns
+    @test_throws ArgumentError FunctionalTable((AA, (:b, ), SORTING_ACCEPT))
+    @test_throws ArgumentError FunctionalTable((AA, (:b, ), SORTING_VERIFY))
 end
