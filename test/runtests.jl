@@ -259,4 +259,17 @@ end
     # sorting keys not contained in columns
     @test_throws ArgumentError FunctionalTable((AA, (:b, ), SORTING_ACCEPT))
     @test_throws ArgumentError FunctionalTable((AA, (:b, ), SORTING_VERIFY))
+
+    # FIXME not implemented yet
+    @test_skip FunctionalTable((a = [2, 1], ), (:a, ), SORTING_PREFIX) ≅
+        FunctionalTable((a = [1, 2], ), (), SORTING_ACCEPT)
+end
+
+@testset "printing" begin
+    ft = FunctionalTable((a = [1, 2], b = [3, 4]), (:a, :b => reverse), SORTING_ACCEPT)
+    reprft = """
+    FunctionalTable of 2 rows, sorting ↑a ↓b
+        a = Int64[1, 2]
+        b = Int64[3, 4]"""
+    @test repr(ft) == reprft
 end
