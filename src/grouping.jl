@@ -49,7 +49,7 @@ getsorting(g::GroupedBlocks{K}) where K = select_sorting(getsorting(g.ft), K)
 $(SIGNATURES)
 """
 function groupby(ft::FunctionalTable, groupkeys::Keys; cfg = SINKVECTORS)
-    checkvalidkeys(groupkeys, ft)
+    checkvalidkeys(groupkeys, keys(ft))
     GroupedBlocks{groupkeys, typeof(ft), typeof(cfg)}(ft, cfg)
 end
 

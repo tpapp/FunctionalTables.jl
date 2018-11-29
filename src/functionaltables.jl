@@ -15,8 +15,6 @@ end
 
 keys(ft::FunctionalTable) = keys(ft.columns)
 
-validkeys(keys_::Keys, ft::FunctionalTable) = validkeys(keys_, keys(ft))
-
 IteratorSize(::FunctionalTable) = Base.HasLength()
 
 length(ft::FunctionalTable) = ft.len
@@ -158,3 +156,6 @@ Map `ft` using `f` by rows, then `merge` the two. See
 """
 merge(ft::FunctionalTable, f::Callable; cfg = SINKCONFIG, replace = false) =
     merge(ft, map(f, ft; cfg = cfg); replace = replace)
+
+filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
+    FunctionalTable(Iterators.filter(f, ft); sorting = getsorting(ft), cfg = cfg)
