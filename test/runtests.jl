@@ -92,6 +92,9 @@ end
     @test_throws ArgumentError column_sorting(("foobar", "baz")) # invalid
     @test_throws ArgumentError column_sorting((:a, :a))          # duplicate
     @test_throws ArgumentError column_sorting((:a, :a), (:b, ))  # not in set
+
+    @test repr(column_sorting(())) == "no sorting"
+    @test repr(column_sorting((:a, :b => reverse))) == "sorting ↑a ↓b"
 end
 
 @testset "retained sorting" begin
