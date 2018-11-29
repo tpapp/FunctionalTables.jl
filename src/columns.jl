@@ -219,7 +219,12 @@ function collect_columns(cfg::SinkConfig, itr, sorting::ColumnSorting,
     elts, state = @ifsomething iterate(itr)
     @argcheck elts isa NamedTuple
     sinks = make_sinks(cfg, elts)
-    collect_columns!(sinks, cfg, itr, sorting, sortingpolicy, K ≡ :accept ? () : elts, state)
+    # NOTE about various sorting policies
+    # 1. for :prefix, we need to narrow sorting so that comparisons make sense,
+    # 2. for :accept, we don't need the last element for comparison, hence the ()
+    collect_columns!(sinks, cfg, itr,
+                     K ≡ :prefix ? select_sorting(sorting, keys(elts)) : sorting,
+                     sortingpolicy, K ≡ :accept ? () : elts, state)
 end
 
 function collect_columns!(sinks::NamedTuple, cfg, itr,

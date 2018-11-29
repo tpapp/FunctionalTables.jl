@@ -239,3 +239,16 @@ end
     @test aggregate(g1, (b = sum, )) ≅ GroupedTable((a = 1, ), FunctionalTable((b = [6],)))
     @test aggregate(g, (b = sum, )) ≅ FunctionalTable((a = [1, 2], b = [6, 9]), (:a, ))
 end
+
+@testset "corner cases for collecting and sorting" begin
+    A = (a = 1, )
+
+    # different keys by row
+    @test_throws ArgumentError FunctionalTable([A, (a = 1, b = 2)])
+
+    # field specified by sorting is missing
+    @test_throws ErrorException FunctionalTable([A, A], (:b, ))
+
+    # prefix narrows sorting silently
+    @test FunctionalTable([A, A], (:b, ), SORTING_PREFIX) ≅ FunctionalTable([A, A])
+end

@@ -117,6 +117,8 @@ end
 $(SIGNATURES)
 
 Calculate sorting when only `keep` keys are kept.
+
+`keep` may contain keys not in the sorting, ie those of a `FunctionalTable`.
 """
 select_sorting(cs::ColumnSorting, keep::Keys) =
     ColumnSorting(_select_sorting(keep, cs.sorting...))
