@@ -1,17 +1,32 @@
 export FunctionalTable, columns, select
 
-struct FunctionalTable{C <: NamedTuple, S <: Sorting}
+struct FunctionalTable{C <: NamedTuple, S <: ColumnSorting}
     len::Int
     columns::C
     sorting::S
-    function FunctionalTable(columns::C; sorting::Tuple = ()) where {C <: NamedTuple}
+    function FunctionalTable(columns::C, sorting::S, ::SortingPolicy{:accept}
+                             ) where {C <: NamedTuple, S <: ColumnSorting}
         @argcheck !isempty(columns) "At least one column is needed."
-        sorting = sorting_sortspecs(sorting, keys(columns))
         len = length(first(columns))
-        @argcheck all(column -> length(column) == len, Base.tail(values(columns))) #
-        new{C, typeof(sorting)}(len, columns, sorting)
+        @argcheck all(column -> length(column) == len, Base.tail(values(columns)))
+        checkvalidkeys(keys(sorting), keys(columns))
+        new{C, S}(len, columns, sorting)
     end
 end
+
+function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::SortingPolicy{:verify})
+    ft = FunctionalTable(columns, sorting, SORTING_ACCEPT)
+    @argcheck issorted(ft; lt = (a, b) -> isless_sorting(sorting, a, b))
+    ft
+end
+
+function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::SortingPolicy{:prefix})
+    error("not implemented yet, maybe open an issue?")
+end
+
+FunctionalTable(columns::NamedTuple, sortspecs = (),
+                sortingpolicy::SortingPolicy = SORTING_VERIFY) =
+    FunctionalTable(columns, column_sorting(sortspecs, keys(columns)), sortingpolicy)
 
 keys(ft::FunctionalTable) = keys(ft.columns)
 
@@ -46,22 +61,24 @@ function columns(ft::FunctionalTable; vector = false, mutable = false)
     end
 end
 
+
 """
 $(SIGNATURES)
 
-Create a `FunctionalTable` from either
+Create a `FunctionalTable` from an iterable that returns `NamedTuple`s.
 
-1. a `NamedTuple` of columns (checked for length),
-
-2. an iterable that returns `NamedTuple`s with the same names (but not necessarily types).
+Returned values need to have the same names (but not necessarily types).
 
 `sorting` specifies sorting, and is a tuple of `:key` or `:key => reverse` elements.
 
 `cfg` determines sink configuration for collecting elements of the columns, see
 [`SinkConfig`](@ref).
 """
-FunctionalTable(itr; sorting::Tuple = (), cfg::SinkConfig = SINKCONFIG) =
-    FunctionalTable(collect_columns(cfg, itr); sorting = sorting)
+function FunctionalTable(itr, sortspecs = (), sortingpolicy::SortingPolicy = SORTING_VERIFY;
+                         cfg::SinkConfig = SINKCONFIG)
+    FunctionalTable(collect_columns(cfg, itr, column_sorting(sortspecs), sortingpolicy)...,
+                    SORTING_ACCEPT)
+end
 
 function iterate(ft::FunctionalTable, states...)
     ys = map(iterate, ft.columns, states...)
@@ -86,16 +103,7 @@ end
 
 function show(io::IO, ft::FunctionalTable)
     @unpack len, columns, sorting = ft
-    print(io, "FunctionalTable of $(len) rows, ")
-    if isempty(sorting)
-        print(io, "no sorting")
-    else
-        print(io, "sorted ")
-        for (i, cs) in enumerate(sorting)
-            i > 1 && print(io, ",")
-            print(io, cs)
-        end
-    end
+    print(io, "FunctionalTable of $(len) rows, ", sorting)
     ioc = IOContext(io, :compact => true)
     for (key, col) in pairs(ft.columns)
         println(ioc)
@@ -115,9 +123,10 @@ Select a subset of columns from the table.
 
 `select(ft; drop = keys)` is a convenience form for keeping **all but** the given columns.
 """
-select(ft::FunctionalTable, keep::Keys) =
-    FunctionalTable(NamedTuple{keep}(ft.columns);
-                    sorting = select_sorting(ft.sorting, keep))
+function select(ft::FunctionalTable, keep::Keys)
+    FunctionalTable(NamedTuple{keep}(ft.columns), select_sorting(ft.sorting, keep),
+                    SORTING_ACCEPT)
+end
 
 select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
 
@@ -137,7 +146,8 @@ function merge(a::FunctionalTable, b::FunctionalTable; replace = false)
         dup = tuple((keys(a) ∩ keys(b))...)
         @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
     end
-    FunctionalTable(merge(a.columns, b.columns); sorting = merge_sorting(a.sorting, keys(b)))
+    FunctionalTable(merge(a.columns, b.columns), merge_sorting(a.sorting, keys(b)),
+                    SORTING_ACCEPT)
 end
 
 """
@@ -158,4 +168,4 @@ merge(ft::FunctionalTable, f::Callable; cfg = SINKCONFIG, replace = false) =
     merge(ft, map(f, ft; cfg = cfg); replace = replace)
 
 filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
-    FunctionalTable(Iterators.filter(f, ft); sorting = getsorting(ft), cfg = cfg)
+    FunctionalTable(Iterators.filter(f, ft), getsorting(ft), SORTING_ACCEPT)

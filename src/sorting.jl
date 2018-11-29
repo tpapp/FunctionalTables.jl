@@ -4,6 +4,8 @@
 ##### Actual sorting is implemented in sort.jl.
 #####
 
+export SORTING_ACCEPT, SORTING_PREFIX, SORTING_VERIFY
+
 ####
 ####
 ####
@@ -34,7 +36,7 @@ sortkey(cs::ColumnSort{K}) where {K} = K
 """
 $(SIGNATURES)
 
-Process an individual sort specification, called by [`sorting_sortspecs`](@ref).
+Process an individual sort specification, called by [`column_sorting`](@ref).
 """
 @inline ColumnSort(key::Symbol, rev::Bool = false) = ColumnSort{key, rev}()
 @inline ColumnSort(keyrev::Pair{Symbol, typeof(reverse)}) = ColumnSort(first(keyrev), true)
@@ -44,18 +46,37 @@ ColumnSort(x) = throw(ArgumentError("Unrecognized sorting specification $(x)."))
 show(io::IO, cs::ColumnSort{K, R}) where {K, R} = print(io, R ? "↓" : "↑", K)
 
 ####
-#### `Sorting` type and interface
+#### `ColumnSorting` type and interface
 ####
 
 """
 Type for sorting, used internally.
 """
-const Sorting = Tuple{Vararg{ColumnSort}}
+struct ColumnSorting{T <: Tuple{Vararg{ColumnSort}}}
+    sorting::T
+end
+
+keys(cs::ColumnSorting) = sortkey.(cs.sorting)
+
+function show(io::IO, cs::ColumnSorting)
+    @unpack sorting = cs
+    if isempty(sorting)
+        print(io, "no sorting")
+    else
+        print(io, "sorting ")
+        for (i, cs) in enumerate(sorting)
+            i > 1 && print(io, ",")
+            print(io, cs)
+        end
+    end
+end
+
 
 """
 $(SIGNATURES)
 
-Process sorting specifications for columns, return a value of type `Sorting`.
+Process sorting specifications for columns (an iterable or possibly a ColumnSorting), return
+a value of type `ColumnSorting`.
 
 Verify that sort keys are unique. When `colkeys` is given, verify that the sort keys are a
 subset of it.
@@ -69,13 +90,16 @@ Accepted syntax:
 All functions which accept sort specs should use this, but the function itself is not part
 of the API.
 """
-function sorting_sortspecs(sortspecs, colkeys::Union{Nothing,Keys} = nothing)
+function column_sorting(sortspecs, colkeys::Union{Nothing,Keys} = nothing)
     sorting = map(ColumnSort, tuple(sortspecs...))
     sortkeys = sortkey.(sorting)
     @argcheck allunique(sortkeys) "Duplicate sort keys."
     colkeys ≡ nothing || @argcheck sortkeys ⊆ colkeys
-    sorting
+    ColumnSorting(sorting)
 end
+
+column_sorting(cs::ColumnSorting, colkeys::Union{Nothing, Keys}) =
+    column_sorting(cs.sorting, colkeys)
 
 """
 $(SIGNATURES)
@@ -83,9 +107,10 @@ $(SIGNATURES)
 Calculate sorting when a table with `sorting` is merged with a table containing `otherkeys`,
 which may replace columns.
 """
-function merge_sorting(sorting::Sorting, otherkeys::Keys)
+function merge_sorting(cs::ColumnSorting, otherkeys::Keys)
+    @unpack sorting = cs
     firstinvalid = findfirst(s -> sortkey(s) ∈ otherkeys, sorting)
-    firstinvalid ≡ nothing ? sorting : sorting[1:(firstinvalid-1)]
+    ColumnSorting(firstinvalid ≡ nothing ? sorting : sorting[1:(firstinvalid-1)])
 end
 
 """
@@ -93,7 +118,8 @@ $(SIGNATURES)
 
 Calculate sorting when only `keep` keys are kept.
 """
-select_sorting(sorting::Sorting, keep::Keys) = _select_sorting(keep, sorting...)
+select_sorting(cs::ColumnSorting, keep::Keys) =
+    ColumnSorting(_select_sorting(keep, cs.sorting...))
 
 _select_sorting(keep) = ()
 
@@ -106,7 +132,6 @@ end
 #### Comparisons
 ####
 
-
 function cmp_columnsort(cs::ColumnSort{K, R}, a::NamedTuple, b::NamedTuple) where {K, R}
     cmp(getproperty(a, K), getproperty(b, K)) * (R ? -1 : 1)
 end
@@ -114,12 +139,12 @@ end
 """
 $(SIGNATURES)
 
-Compare `a` and `b`, which support the `getproperty` interface, with the given column
+Compare rows `a` and `b`, which support the `getproperty` interface, with the given column
 sorting.
 
 *Internal*.
 """
-cmp_sorting(sorting::Sorting, a, b) = _cmp_sorting(a, b, sorting...)
+@inline cmp_sorting(cs::ColumnSorting, a, b) = _cmp_sorting(a, b, cs.sorting...)
 
 _cmp_sorting(a, b) = 0
 
@@ -129,12 +154,14 @@ function _cmp_sorting(a, b, cs::ColumnSort, rest...)
     _cmp_sorting(a, b, rest...)
 end
 
+@inline isless_sorting(cs::ColumnSorting, a, b) = cmp_sorting(cs, a, b) == -1
+
 """
 $(SIGNATURES)
 
 Return the part of `sorting` under which `a ≤ b`.
 """
-retained_sorting(sorting::Sorting, a, b) = _retained_sorting(a, b, sorting...)
+retained_sorting(cs::ColumnSorting, a, b) = ColumnSorting(_retained_sorting(a, b, cs.sorting...))
 
 _retained_sorting(a, b) = ()
 
@@ -145,3 +172,16 @@ function _retained_sorting(a, b, cs::ColumnSort, rest...)
         ()
     end
 end
+
+struct SortingPolicy{K}
+    function SortingPolicy{K}() where K
+        @argcheck K ∈ (:accept, :verify, :prefix)
+        new{K}()
+    end
+end
+
+const SORTING_ACCEPT = SortingPolicy{:accept}()
+
+const SORTING_VERIFY = SortingPolicy{:verify}()
+
+const SORTING_PREFIX = SortingPolicy{:prefix}()

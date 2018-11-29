@@ -4,7 +4,7 @@ using FunctionalTables:
     # utilities
     cancontain, narrow, append1, split_namedtuple, merge_sorting,
     # column sorting building blocks
-    ColumnSort, sorting_sortspecs, cmp_sorting, retained_sorting
+    ColumnSort, column_sorting, cmp_sorting, retained_sorting
 import Tables
 
 include("utilities.jl")         # utilities for tests
@@ -42,11 +42,13 @@ end
 
 @testset "collect by names" begin
     itr = [(a = i, b = Float64(i), c = 'a' + i - 1) for i in 1:10]
-    result = collect_columns(SinkConfig(;useRLE = false), itr)
+    sorting = column_sorting((:a, :b, :c))
+    result, s = collect_columns(SinkConfig(;useRLE = false), itr, sorting, SORTING_ACCEPT)
     @test result isa NamedTuple{(:a, :b, :c), Tuple{Vector{Int8}, Vector{Float64}, Vector{Char}}}
     @test result.a ≅ 1:10
     @test result.b ≅ Float64.(1:10)
     @test result.c ≅ (0:9) .+ 'a'
+    @test s ≡ sorting
 end
 
 @testset "simple RLE" begin
@@ -71,8 +73,9 @@ end
 
 @testset "large collection" begin
     v = randvector(1000)
-    columns = collect_columns(SINKCONFIG, [(a = a, ) for a in v])
+    columns, sorting = collect_columns(SINKCONFIG, [(a = a, ) for a in v], column_sorting(()), SORTING_ACCEPT)
     @test collect(columns.a) ≅ v
+    @test sorting ≡ column_sorting(())
 end
 
 @testset "splitting named tuples" begin
@@ -83,19 +86,21 @@ end
 end
 
 @testset "column sorting specifications" begin
-    @test sorting_sortspecs((:a, :b => reverse, ColumnSort(:c, false))) ==
-        (ColumnSort(:a, false), ColumnSort(:b, true), ColumnSort(:c, false))
-    @test_throws ArgumentError sorting_sortspecs(("foobar", "baz")) # invalid
-    @test_throws ArgumentError sorting_sortspecs((:a, :a))          # duplicate
-    @test_throws ArgumentError sorting_sortspecs((:a, :a), (:b, ))  # not in set
+    @test column_sorting((:a, :b => reverse, ColumnSort(:c, false))) ==
+        FunctionalTables.ColumnSorting((ColumnSort(:a, false), ColumnSort(:b, true),
+                                        ColumnSort(:c, false)))
+    @test_throws ArgumentError column_sorting(("foobar", "baz")) # invalid
+    @test_throws ArgumentError column_sorting((:a, :a))          # duplicate
+    @test_throws ArgumentError column_sorting((:a, :a), (:b, ))  # not in set
 end
 
 @testset "retained sorting" begin
-    s = sorting_sortspecs((:a, :b => reverse))
+    s = column_sorting((:a, :b => reverse))
     row = (a = 1, b = 2, c = 3)
     @test retained_sorting(s, row, row) ≡ s
     @test retained_sorting(s, row, (a = 2, b = 1, c = -1)) ≡ s
-    @test retained_sorting(s, row, (a = 2, b = 3, c = -1)) ≡ sorting_sortspecs((:a, ))
+    @test retained_sorting(s, row, (a = 2, b = 3, c = -1)) ≡ column_sorting((:a, ))
+    @test @inferred(retained_sorting(column_sorting(()), row, row)) ≡ column_sorting(())
 end
 
 @testset "FunctionalTable basics and column operations" begin
@@ -119,10 +124,10 @@ end
 end
 
 @testset "merge sorting" begin
-    s = sorting_sortspecs((:a, :b, :c))
+    s = column_sorting((:a, :b, :c))
     @test merge_sorting(s, (:d, :e)) ≡ s
-    @test merge_sorting(s, (:c, :b)) ≡ sorting_sortspecs((:a, ))
-    @test merge_sorting(s, (:a, :b, :c)) ≡ ()
+    @test merge_sorting(s, (:c, :b)) ≡ column_sorting((:a, ))
+    @test merge_sorting(s, (:a, :b, :c)) ≡ column_sorting(())
 end
 
 @testset "merging" begin
@@ -130,27 +135,27 @@ end
     B = 'a':('a'+9)
     C = Float64.(21:30)
     A2 = .-A
-    ft = FunctionalTable((a = A, b = B); sorting = (:a, :b))
+    ft = FunctionalTable((a = A, b = B), (:a, :b))
     @test merge(ft, FunctionalTable((c = C, ))) ≅
-        FunctionalTable((a = A, b = B, c = C); sorting = (:a, :b))
+        FunctionalTable((a = A, b = B, c = C), (:a, :b))
     @test_throws ArgumentError merge(ft, FunctionalTable((c = C, a = A2)))
     @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
-        FunctionalTable((a = A2, b = B, c = C); sorting = ())
+        FunctionalTable((a = A2, b = B, c = C), ())
 end
 
 @testset "map" begin
     A = 1:10
     B = 'a':('a'+9)
-    ft = FunctionalTable((a = A, b = B); sorting = (:a, :b))
+    ft = FunctionalTable((a = A, b = B), (:a, :b))
     f(row) = (b = row.a + 1, c = row.b + 2)
     B2 = A .+ 1
     C = collect(B .+ 2)
     ft2 = map(f, ft)
     # NOTE map removes sorting
-    @test ft2 ≅ FunctionalTable((b = B2, c = C); sorting = ())
+    @test ft2 ≅ FunctionalTable((b = B2, c = C))
     ft3 = merge(ft, f; replace = true)
     # NOTE as :b is replaced, its sorting is removed
-    @test ft3 ≅ FunctionalTable((a = A, b = B2, c = C); sorting = (:a, ))
+    @test ft3 ≅ FunctionalTable((a = A, b = B2, c = C), (:a, ))
     # overlap, without replacement
     @test_throws ArgumentError merge(ft, f)
 end
@@ -159,9 +164,9 @@ end
     A = 1:5
     B = 'a':'e'
     s = (:a, :b)
-    ft = FunctionalTable((a = A, b = B); sorting = s)
+    ft = FunctionalTable((a = A, b = B), s)
     @test filter(row -> isodd(row.a), ft) ≅
-        FunctionalTable((a = [1, 3, 5], b = ['a', 'c', 'e']); sorting = s)
+        FunctionalTable((a = [1, 3, 5], b = ['a', 'c', 'e']), s)
 end
 
 @testset "groupby 1" begin
@@ -200,11 +205,12 @@ end
 end
 
 @testset "column sort comparisons" begin
-    sorting = sorting_sortspecs((:a, :b => reverse))
+    sorting = column_sorting((:a, :b => reverse))
     @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (a = 1, b = 2)) == 0
     @test @inferred cmp_sorting(sorting, (a = 1, b = 3), (a = 1, b = 2)) == -1
     @test @inferred cmp_sorting(sorting, (a = 0, b = 3), (a = 1, b = 2)) == -1
     @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (b = 2, a = 1)) == 0 # order irrelevant
+    @test_throws ErrorException cmp_sorting(sorting, (c = 1, ), (c = 1, ))    # no such field
 end
 
 @testset "sort" begin
@@ -214,13 +220,14 @@ end
     sft = sort(ft, (:b, :a => reverse))
     @test sft ≅ FunctionalTable((a = [3, 2, 1, 1, -1],
                                  b = [1, 2, 2, 2, 2],
-                                 c = [3, 5, 1, 4, 2]); sorting = (:b, :a => reverse))
+                                 c = [3, 5, 1, 4, 2]),
+                                (:b, :a => reverse))
 end
 
 @testset "aggregation" begin
     a = [1, 1, 1, 2, 2]
     b = 1:5
-    ft = FunctionalTable((a = a, b = b); sorting = (:a, :b))
+    ft = FunctionalTable((a = a, b = b), (:a, :b))
     A = (a = sum(a), b = sum(b))
     @test aggregate(ft, (a = sum, b = sum)) == A
     @test aggregate(ft, Dict(:a => sum, :b => sum)) == A
@@ -230,5 +237,5 @@ end
     g = groupby(ft, (:a, ))
     g1 = first(g)
     @test aggregate(g1, (b = sum, )) ≅ GroupedTable((a = 1, ), FunctionalTable((b = [6],)))
-    @test aggregate(g, (b = sum, )) ≅ FunctionalTable((a = [1, 2], b = [6, 9]); sorting = (:a, ))
+    @test aggregate(g, (b = sum, )) ≅ FunctionalTable((a = [1, 2], b = [6, 9]), (:a, ))
 end
