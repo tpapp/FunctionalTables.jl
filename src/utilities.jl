@@ -6,20 +6,15 @@ const Keys = Tuple{Vararg{Symbol}}
 """
 $(SIGNATURES)
 
-Test that `keys` are valid keys of the second argument.
-"""
-validkeys(keys::Keys, ftkeys::Keys) = keys ⊆ ftkeys
+Check that `argkeys` are a subset of the valid keys.
 
+When that does not hold, throw and error with an informative message.
 """
-$(SIGNATURES)
-
-Check that `keys` are valid for `obj`.
-
-!!! NOTE
-    Extend `validkeys` for other `obj`, not this method.
-"""
-function checkvalidkeys(keys::Keys, obj)
-    @argcheck validkeys(keys, obj) "Some keys $(keys) which are not valid for this object."
+function checkvalidkeys(argkeys::Keys, validkeys::Keys)
+    for key in argkeys
+        @argcheck key ∈ validkeys "Invalid key $(key) ∉ $(validkeys)."
+    end
+    nothing
 end
 
 """

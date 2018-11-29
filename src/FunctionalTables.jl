@@ -7,7 +7,8 @@ using IterTools: @ifsomething, imap
 import Tables
 
 using Base: Callable
-import Base: length, IteratorSize, IteratorEltype, eltype, iterate, keys, show, merge, map
+import Base: length, IteratorSize, IteratorEltype, eltype, iterate, keys, show, merge, map,
+    filter
 
 include("utilities.jl")
 include("columns.jl")

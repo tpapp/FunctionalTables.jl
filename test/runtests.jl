@@ -147,6 +147,15 @@ end
     @test_throws ArgumentError merge(ft, f)
 end
 
+@testset "filter" begin
+    A = 1:5
+    B = 'a':'e'
+    s = (:a, :b)
+    ft = FunctionalTable((a = A, b = B); sorting = s)
+    @test filter(row -> isodd(row.a), ft) ≅
+        FunctionalTable((a = [1, 3, 5], b = ['a', 'c', 'e']); sorting = s)
+end
+
 @testset "groupby 1" begin
     keycounts = [:a => 10, :b => 17, :c => 19]
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i) for i in 1:c], vcat, keycounts))
