@@ -16,8 +16,6 @@ function ≅(a::FunctionalTable, b::FunctionalTable)
             zip(values(a.columns), values(b.columns)))
 end
 
-≅(a::GroupedTable, b::GroupedTable) = (a.grouping ≡ b.grouping) && (a.ft ≅ b.ft)
-
 ####
 #### random vectors
 ####
