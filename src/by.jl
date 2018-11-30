@@ -1,3 +1,7 @@
+#####
+##### Interface and implementation for split-apply-combine.
+#####
+
 export by
 
 ####
@@ -50,7 +54,7 @@ fuse(f, index::NamedTuple, tables...) = merge_repeated(index, f(index, tables...
 """
 $(TYPEDEF)
 
-Implements [`splitby`](@ref).
+Implements [`by`](@ref).
 
 Iterator state is a tuple, with
 
