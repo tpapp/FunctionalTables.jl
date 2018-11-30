@@ -1,4 +1,4 @@
-export FunctionalTable, columns, select
+export FunctionalTable, columns, select, head
 
 struct FunctionalTable{C <: NamedTuple, S <: ColumnSorting}
     len::Int
@@ -172,3 +172,11 @@ merge(ft::FunctionalTable, f::Callable; cfg = SINKCONFIG, replace = false) =
 
 filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
     FunctionalTable(Iterators.filter(f, ft), getsorting(ft), TrustSorting())
+
+"""
+$(SIGNATURES)
+
+A `FunctionalTable` of the first `n` rows. For previews etc.
+"""
+head(ft::FunctionalTable, n::Integer) =
+    FunctionalTable(Iterators.take(ft, n), getsorting(ft), TrustSorting())
