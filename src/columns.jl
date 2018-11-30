@@ -220,11 +220,11 @@ function collect_columns(cfg::SinkConfig, itr, sorting::ColumnSorting,
     @argcheck elts isa NamedTuple
     sinks = make_sinks(cfg, elts)
     # NOTE about various sorting policies
-    # 1. for :prefix, we need to narrow sorting so that comparisons make sense,
-    # 2. for :accept, we don't need the last element for comparison, hence the ()
+    # 1. for :try, we need to narrow sorting so that comparisons make sense,
+    # 2. for :trust, we don't need the last element for comparison, hence the ()
     collect_columns!(sinks, cfg, itr,
-                     K ≡ :prefix ? select_sorting(sorting, keys(elts)) : sorting,
-                     sortingpolicy, K ≡ :accept ? () : elts, state)
+                     K ≡ :try ? select_sorting(sorting, keys(elts)) : sorting,
+                     sortingpolicy, K ≡ :trust ? () : elts, state)
 end
 
 function collect_columns!(sinks::NamedTuple, cfg, itr,
@@ -235,11 +235,11 @@ function collect_columns!(sinks::NamedTuple, cfg, itr,
         y ≡ nothing && return finalize_sinks(cfg, sinks), sorting
         elts, state = y
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
-        if K ≢ :accept
+        if K ≢ :trust
             if cmp_sorting(sorting, lastelts, elts) > 0
                 if K ≡ :verify
                     error("Sorting $(sorting) violated: $(lastelts) ≰ $(elts).")
-                else # K ≡ :partial
+                else # K ≡ :try
                     return collect_columns!(newsinks, cfg, itr,
                                             retained_sorting(sorting, lastelts, elts),
                                             sortingpolicy, elts, state)

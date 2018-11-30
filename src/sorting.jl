@@ -4,7 +4,7 @@
 ##### Actual sorting is implemented in sort.jl.
 #####
 
-export SORTING_ACCEPT, SORTING_PREFIX, SORTING_VERIFY
+export TrustSorting, TrySorting, VerifySorting
 
 ####
 ####
@@ -172,15 +172,32 @@ function _retained_sorting(a, b, cs::ColumnSort, rest...)
     end
 end
 
+"""
+$(TYPEDEF)
+
+Policy for dealing with specified sortings.
+
+See [`VerifySorting`](@ref), [`TrustSorting`](@ref), and [`TrySorting`](@ref).
+"""
 struct SortingPolicy{K}
     function SortingPolicy{K}() where K
-        @argcheck K ∈ (:accept, :verify, :prefix)
+        @argcheck K ∈ (:trust, :verify, :try)
         new{K}()
     end
 end
 
-const SORTING_ACCEPT = SortingPolicy{:accept}()
+"Verify that the specified sorting holds. This is the default sorting policy."
+const VerifySorting = SortingPolicy{:verify}
 
-const SORTING_VERIFY = SortingPolicy{:verify}()
+"""
+Accept the specified sorting to hold without any checks (except for verifying that column
+names are valid).
 
-const SORTING_PREFIX = SortingPolicy{:prefix}()
+!!! note
+    This can lead to incorrect results, use cautiously. [`VerifySorting`](@ref) is
+    recommended instead as it has little overhead.
+"""
+const TrustSorting = SortingPolicy{:trust}
+
+"Try the specified sorting, then gracefully degrade to a subset of it that holds."
+const TrySorting = SortingPolicy{:try}

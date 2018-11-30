@@ -24,7 +24,8 @@ end
     @test cancontain(Float64, maxintfloat(Float64))
     @test !cancontain(Float64, Int(maxintfloat(Float64)) + 1)
     for T in (Float32, Float64)
-        # Test around `maxintfloat`, as it will fail if the number can be contained by accident.
+        # Test around `maxintfloat`, as it will fail if the number can be contained by
+        # accident.
         for elt in vcat(Int(maxintfloat(T)) .+ (-1:1), -Int(maxintfloat(T)) .+ (-1:1))
             v = T[]
             push!(v, elt)
@@ -42,7 +43,7 @@ end
 @testset "collect by names" begin
     itr = [(a = i, b = Float64(i), c = 'a' + i - 1) for i in 1:10]
     sorting = column_sorting((:a, :b, :c))
-    result, s = collect_columns(SinkConfig(;useRLE = false), itr, sorting, SORTING_ACCEPT)
+    result, s = collect_columns(SinkConfig(;useRLE = false), itr, sorting, TrustSorting())
     @test result isa NamedTuple{(:a, :b, :c), Tuple{Vector{Int8}, Vector{Float64}, Vector{Char}}}
     @test result.a ≅ 1:10
     @test result.b ≅ Float64.(1:10)
@@ -72,7 +73,8 @@ end
 
 @testset "large collection" begin
     v = randvector(1000)
-    columns, sorting = collect_columns(SINKCONFIG, [(a = a, ) for a in v], column_sorting(()), SORTING_ACCEPT)
+    columns, sorting = collect_columns(SINKCONFIG, [(a = a, ) for a in v],
+                                       column_sorting(()), TrustSorting())
     @test collect(columns.a) ≅ v
     @test sorting ≡ column_sorting(())
 end
@@ -254,19 +256,19 @@ end
     @test_throws ErrorException FunctionalTable(AA, (:b, ))
 
     # prefix narrows sorting silently
-    @test FunctionalTable(AA, (:b, ), SORTING_PREFIX) ≅ FunctionalTable(AA)
+    @test FunctionalTable(AA, (:b, ), TrySorting()) ≅ FunctionalTable(AA)
 
     # sorting keys not contained in columns
-    @test_throws ArgumentError FunctionalTable((AA, (:b, ), SORTING_ACCEPT))
-    @test_throws ArgumentError FunctionalTable((AA, (:b, ), SORTING_VERIFY))
+    @test_throws ArgumentError FunctionalTable((AA, (:b, ), TrustSorting()))
+    @test_throws ArgumentError FunctionalTable((AA, (:b, ), VerifySorting()))
 
     # FIXME not implemented yet
-    @test_skip FunctionalTable((a = [2, 1], ), (:a, ), SORTING_PREFIX) ≅
-        FunctionalTable((a = [1, 2], ), (), SORTING_ACCEPT)
+    @test_skip FunctionalTable((a = [2, 1], ), (:a, ), TrySorting()) ≅
+        FunctionalTable((a = [1, 2], ), (), TrustSorting())
 end
 
 @testset "printing" begin
-    ft = FunctionalTable((a = [1, 2], b = [3, 4]), (:a, :b => reverse), SORTING_ACCEPT)
+    ft = FunctionalTable((a = [1, 2], b = [3, 4]), (:a, :b => reverse), TrustSorting())
     reprft = """
     FunctionalTable of 2 rows, sorting ↑a ↓b
         a = Int64[1, 2]
