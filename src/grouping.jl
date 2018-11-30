@@ -1,45 +1,47 @@
-export by, GroupedColumn, map_nongrouped
+export by
 
 ####
-#### GroupedColumn type
+#### RepeatedValue type
 ####
 
 """
-GroupedColumn(value, len)
+RepeatedValue(value, len)
 
-A representation of a value that was used for grouping. Equivalent to a vector containing
-`len` instances of `value` with additional semantics that is by convention in this package.
-See [`map_nongrouped`].
+Equivalent to a vector containing `len` instances of `value`. Used *internally*.
 """
-struct GroupedColumn{T} <: AbstractVector{T}
+struct RepeatedValue{T} <: AbstractVector{T}
     value::T
     len::Int
 end
 
-Base.size(s::GroupedColumn) = (s.len, )
+Base.size(s::RepeatedValue) = (s.len, )
 
-Base.IndexStyle(::Type{<:GroupedColumn}) = Base.IndexLinear()
+Base.IndexStyle(::Type{<:RepeatedValue}) = Base.IndexLinear()
 
-function Base.getindex(s::GroupedColumn, i::Integer)
+function Base.getindex(s::RepeatedValue, i::Integer)
     @boundscheck checkbounds(s, i)
     s.value
 end
 
-groupedkeys(ft::FunctionalTable) =
-    tuple((k for (k, c) in pairs(ft.columns) if c isa GroupedColumn)...)
+"""
+$(SIGNATURES)
+
+Make a functional table from `index`, repeating each value for a column to match the length
+of `ft`, then merge the two.
+"""
+function merge_repeated(index::NamedTuple, ft::FunctionalTable)
+    len = length(ft)
+    merge(FunctionalTable(map(v -> RepeatedValue(v, len), index)), ft)
+end
+
+merge_repeated(index::NamedTuple, table) = merge_repeated(index, FunctionalTable(table))
 
 """
 $(SIGNATURES)
 
-Split the grouped and nongrouped columns of `f`, apply `f` to the nongrouped columns, then
-merge with grouped columns first. For `replace`, see [`merge`](@ref).
+Prepend the `index` as repeated columns to `f(index, tables...)`.
 """
-function map_nongrouped(f, ft::FunctionalTable; replace = false)
-    K = groupedkeys(ft)
-    merge(select(ft, K), f(select(ft; drop = K)); replace = replace)
-end
-
-map_nongrouped(f; replace = false) = ft -> map_nongrouped(f, ft; replace = replace)
+fuse(f, index::NamedTuple, tables...) = merge_repeated(index, f(index, tables...))
 
 ####
 #### iterating grouped values (implementation, internal)
@@ -48,7 +50,7 @@ map_nongrouped(f; replace = false) = ft -> map_nongrouped(f, ft; replace = repla
 """
 $(TYPEDEF)
 
-Implements [`by`](@ref).
+Implements [`splitby`](@ref).
 
 Iterator state is a tuple, with
 
@@ -56,23 +58,23 @@ Iterator state is a tuple, with
 
 2. `itrstate`, the iteration state for `itr`.
 """
-struct GroupedTable{K, T <: FunctionalTable, C <: SinkConfig}
+struct SplitTable{K, T <: FunctionalTable, C <: SinkConfig}
     ft::T
     cfg::C
-    function GroupedTable{K}(ft::T, cfg::C) where {K, T <: FunctionalTable, C <: SinkConfig}
+    function SplitTable{K}(ft::T, cfg::C) where {K, T <: FunctionalTable, C <: SinkConfig}
         checkvalidkeys(K, keys(getsorting(ft))) # FIXME rethink: is all that is needed?
         new{K, T, C}(ft)
     end
 end
 
-IteratorSize(::Type{<:GroupedTable}) = Base.SizeUnknown()
+IteratorSize(::Type{<:SplitTable}) = Base.SizeUnknown()
 
 # FIXME type may be known to a certain extent, <: FunctionalTable?
-IteratorEltype(::Type{<:GroupedTable}) = Base.EltypeUnknown()
+IteratorEltype(::Type{<:SplitTable}) = Base.EltypeUnknown()
 
-getsorting(g::GroupedTable{K}) where K = select_sorting(getsorting(g.ft), K)
+getsorting(g::SplitTable{K}) where K = select_sorting(getsorting(g.ft), K)
 
-function iterate(g::GroupedTable{K}) where K
+function iterate(g::SplitTable{K}) where K
     @unpack ft, cfg = g
     row, itrstate = @ifsomething iterate(ft)
     firstkey, elts = split_namedtuple(NamedTuple{K}, row)
@@ -80,22 +82,14 @@ function iterate(g::GroupedTable{K}) where K
     _collect_block!(sinks, g, firstkey, itrstate)
 end
 
-function iterate(g::GroupedTable, state)
+function iterate(g::SplitTable, state)
     sinks, firstkey, itrstate = @ifsomething state
     _collect_block!(sinks, g, firstkey, itrstate)
 end
 
-function _collect_block!(sinks::NamedTuple, g::GroupedTable{K}, firstkey, state) where {K}
+function _collect_block!(sinks::NamedTuple, g::SplitTable{K}, firstkey, state) where {K}
     @unpack ft, cfg = g
-    function _grouped()
-        # NOTE: Helper function that finalizes the sinks and makes a table of the grouped
-        # and nongrouped values.
-        ft_nongrouped = FunctionalTable(finalize_sinks(cfg, sinks))
-        len = length(ft_nongrouped)
-        ft_grouped = FunctionalTable(map(v -> GroupedColumn(v, len), firstkey))
-        # FIXME: some residual sorting remains, use? should be calculated in constructor.
-        merge(ft_grouped, ft_nongrouped)
-    end
+    _grouped() = (firstkey, FunctionalTable(finalize_sinks(cfg, sinks)))
     while true
         y = iterate(ft, state)
         y ≡ nothing && return _grouped(), nothing
@@ -111,24 +105,33 @@ end
 #### by and its implementation
 ####
 
-by(ft::FunctionalTable, groupkeys::Keys; cfg = SINKVECTORS) =
-    GroupedTable{groupkeys}(ft, cfg)
+"""
+$(SIGNATURES)
+
+An iterator that groups rows of tables by the columns `indexkeys`, returning
+`(index::NamedTupe, table::FunctionalTable)` for each contiguous block of the index keys.
+
+`cfg` is used for collecting `table`.
+"""
+by(indexkeys::Keys, ft::FunctionalTable; cfg = SINKVECTORS) = SplitTable{indexkeys}(ft, cfg)
 
 """
 $(SIGNATURES)
 
-Group rows by columns `groupkeys`, apply `f`, then combine into a FunctionalTable.
+Map a table split with [`by`](@ref) using `f`.
 
-`f` receives a `FunctionalTable`, collected with `cfg`. It is supposed to return an
-*iterable* that returns rows. These will be collected into a `FunctionalTable` with
-`outer_cfg`.
+Specifically, `f(indexkeys, table)` receives the index keys (a `NamedTuple`) and a
+`FunctionalTable`.
+
+It is supposed to return an *iterable* that returns rows (can be a `FunctionalTable`). These
+will be prepended with the corresponding index, and collected into a `FunctionalTable` with
+`cfg`.
 
 When `f` returns just a single row (eg aggregation), wrap by `Ref` to create a
-single-element iterable. See also `map_ungrouped`.
+single-element iterable.
 """
-function by(f, ft::FunctionalTable, groupkeys::Keys;
-            cfg = SINKVECTORS, outer_cfg = SINKCONFIG)
-    # FIXME: 1. custom sorting override?
-    FunctionalTable(Iterators.flatten(imap(f, by(ft, groupkeys; cfg = cfg))),
-                    getsorting(ft), TrySorting(); cfg = outer_cfg)
+function Base.map(f, st::SplitTable; cfg = SINKCONFIG)
+    # FIXME: idea: custom sorting override? would that make sense?
+    FunctionalTable(Iterators.flatten(imap(args -> fuse(f, args...), st)),
+                    getsorting(st), TrustSorting(); cfg = cfg)
 end

@@ -10,6 +10,8 @@
 
 ≅(a::AbstractVector, b::AbstractVector) = length(a) == length(b) && all(a .≅ b)
 
+≅(a::Tuple, b::Tuple) = length(a) == length(b) && all(a .≅ b)
+
 function ≅(a::FunctionalTable, b::FunctionalTable)
     keys(a.columns) === keys(b.columns) && a.sorting == b.sorting && a.len == b.len &&
         all(((ac, bc), ) -> collect(ac) ≅ collect(bc),

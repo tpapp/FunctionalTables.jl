@@ -14,6 +14,9 @@ struct FunctionalTable{C <: NamedTuple, S <: ColumnSorting}
     end
 end
 
+# just to skip iterating, FIXME introduce re-constructor with sorting, sink-config, etc?
+FunctionalTable(ft::FunctionalTable) = ft
+
 function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::VerifySorting)
     ft = FunctionalTable(columns, sorting, TrustSorting())
     @argcheck issorted(ft; lt = (a, b) -> isless_sorting(sorting, a, b))
