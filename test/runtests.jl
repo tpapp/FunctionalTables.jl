@@ -8,6 +8,10 @@ import Tables
 
 include("utilities.jl")         # utilities for tests
 
+####
+#### Utilities and low-level building blocks
+####
+
 @testset "narrow" begin
     @test narrow(1) ≡ true
     @test narrow(-9) ≡ Int8(-9)
@@ -38,6 +42,13 @@ end
     a1 = append1(ones(Int8, 2), missing)
     @test eltype(a1) ≡ Union{Missing, Int8}
     @test [1, 1, missing] ≅ a1
+end
+
+@testset "splitting named tuples" begin
+    s = NamedTuple{(:a, :c)}
+    @test split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
+    @test split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
+    @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
 end
 
 @testset "collect by names" begin
@@ -79,12 +90,9 @@ end
     @test sorting ≡ column_sorting(())
 end
 
-@testset "splitting named tuples" begin
-    s = NamedTuple{(:a, :c)}
-    @test split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
-    @test split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
-    @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
-end
+####
+#### Sorting building blocks
+####
 
 @testset "column sorting specifications" begin
     @test column_sorting((:a, :b => reverse, ColumnSort(:c, false))) ==
@@ -107,6 +115,10 @@ end
     @test @inferred(retained_sorting(column_sorting(()), row, row)) ≡ column_sorting(())
 end
 
+####
+#### FunctionalTable API
+####
+
 @testset "FunctionalTable basics and column operations" begin
     A = 1:10
     B = 'a':('a'+9)
@@ -125,6 +137,7 @@ end
     @test cols.a == A && cols.a ≢ A
     @test cols.b == B && cols.b ≢ B
     @test cols.c == C && cols.c ≢ C
+    @test FunctionalTable(ft) ≡ ft # same object
 end
 
 @testset "merge sorting" begin
@@ -147,7 +160,7 @@ end
         FunctionalTable((a = A2, b = B, c = C), ())
 end
 
-@testset "map" begin
+@testset "map (direct)" begin
     A = 1:10
     B = 'a':('a'+9)
     ft = FunctionalTable((a = A, b = B), (:a, :b))
@@ -173,27 +186,27 @@ end
         FunctionalTable((a = [1, 3, 5], b = ['a', 'c', 'e']), s)
 end
 
-@testset "groupby 1" begin
+@testset "split by 1" begin
     keycounts = [:a => 10, :b => 17, :c => 19]
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i)
                                                   for i in 1:c], vcat, keycounts),
                          (:sym, :val))
-    g = by(ft, (:sym, ))
+    g = by((:sym, ), ft)
     cg = collect(g)
     for (i, (s, c)) in enumerate(keycounts)
-        @test FunctionalTable(cg[i]) ≅ FunctionalTable((sym = fill(s, c), val = 1:c))
+        @test cg[i] ≅ ((sym = s, ), FunctionalTable((val = 1:c, )))
     end
 end
 
-@testset "groupby 2" begin
+@testset "split by 2" begin
     A = [1, 1, 1, 2, 2]
     B = 'a':'e'
     ft = FunctionalTable((a = A, b = B), (:a, ))
-    g = by(ft, (:a, ))
+    g = by((:a, ), ft)
     @test Base.IteratorSize(g) ≡ Base.SizeUnknown()
     result = collect(g)
-    @test result ≅ [FunctionalTable((a = GroupedColumn(1, 3), b = ['a', 'b', 'c'],)),
-                    FunctionalTable((a = GroupedColumn(2, 2), b = ['d', 'e'],))]
+    @test result ≅ [((a = 1, ), FunctionalTable((b = ['a', 'b', 'c'],))),
+                    ((a = 2, ), FunctionalTable((b = ['d', 'e'],)))]
 end
 
 @testset "tables interface" begin
@@ -230,19 +243,12 @@ end
                                 (:b, :a => reverse))
 end
 
-@testset "grouping" begin
+@testset "map by" begin
     a = [1, 1, 1, 2, 2]
     b = 1:5
     ft = FunctionalTable((a = a, b = b), (:a, :b))
-    f(ft) = map(sum, columns(ft))
-    @test by(Ref ∘ f, ft, (:a, )) ≅ FunctionalTable((a = [3, 4], b = [6, 9]), (:a, :b))
-
-    ft = FunctionalTable((a = GroupedColumn(1, 3), b = 1:3, c = GroupedColumn(7, 3)))
-    f(ft) = FunctionalTable(map(x -> x .+ 1, columns(ft)))
-    @test FunctionalTables.groupedkeys(ft) ≡ (:a, :c)
-    ft2 = map_nongrouped(f)(ft)
-    @test columns(ft2) ≡ (a = GroupedColumn(1, 3), c = GroupedColumn(7, 3), b = 2:4)
-    @test FunctionalTables.getsorting(ft2) ≡ column_sorting(())
+    f(_, ft) = map(sum, columns(ft))
+    @test map(Ref ∘ f, by((:a, ), ft)) ≅ FunctionalTable((a = [1, 2], b = [6, 9]), (:a, ))
 end
 
 @testset "corner cases for collecting and sorting" begin
