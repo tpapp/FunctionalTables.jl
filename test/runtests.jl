@@ -281,3 +281,12 @@ end
         b = Int64[3, 4]"""
     @test repr(ft) == reprft
 end
+
+@testset "take" begin
+    a = 1:1000
+    b = fill(9, length(a))
+    rt = Tables.rowtable((a = a, b = b))
+    s = (:a, :b)
+    ft = FunctionalTable(rt, s)
+    @test head(ft, 100) ≅ FunctionalTable(Iterators.take(rt, 100), s)
+end
