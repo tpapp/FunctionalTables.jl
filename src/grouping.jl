@@ -130,5 +130,5 @@ function by(f, ft::FunctionalTable, groupkeys::Keys;
             cfg = SINKVECTORS, outer_cfg = SINKCONFIG)
     # FIXME: 1. custom sorting override?
     FunctionalTable(Iterators.flatten(imap(f, by(ft, groupkeys; cfg = cfg))),
-                    getsorting(ft), SORTING_PREFIX; cfg = outer_cfg)
+                    getsorting(ft), SORTING_TRY; cfg = outer_cfg)
 end

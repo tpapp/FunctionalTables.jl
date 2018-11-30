@@ -4,7 +4,7 @@
 ##### Actual sorting is implemented in sort.jl.
 #####
 
-export SORTING_ACCEPT, SORTING_PREFIX, SORTING_VERIFY
+export SORTING_TRUST, SORTING_TRY, SORTING_VERIFY
 
 ####
 ####
@@ -174,13 +174,13 @@ end
 
 struct SortingPolicy{K}
     function SortingPolicy{K}() where K
-        @argcheck K ∈ (:accept, :verify, :prefix)
+        @argcheck K ∈ (:trust, :verify, :try)
         new{K}()
     end
 end
 
-const SORTING_ACCEPT = SortingPolicy{:accept}()
+const SORTING_TRUST = SortingPolicy{:trust}()
 
 const SORTING_VERIFY = SortingPolicy{:verify}()
 
-const SORTING_PREFIX = SortingPolicy{:prefix}()
+const SORTING_TRY = SortingPolicy{:try}()

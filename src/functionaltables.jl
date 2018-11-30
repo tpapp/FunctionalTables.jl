@@ -4,7 +4,7 @@ struct FunctionalTable{C <: NamedTuple, S <: ColumnSorting}
     len::Int
     columns::C
     sorting::S
-    function FunctionalTable(columns::C, sorting::S, ::SortingPolicy{:accept}
+    function FunctionalTable(columns::C, sorting::S, ::SortingPolicy{:trust}
                              ) where {C <: NamedTuple, S <: ColumnSorting}
         @argcheck !isempty(columns) "At least one column is needed."
         len = length(first(columns))
@@ -15,12 +15,12 @@ struct FunctionalTable{C <: NamedTuple, S <: ColumnSorting}
 end
 
 function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::SortingPolicy{:verify})
-    ft = FunctionalTable(columns, sorting, SORTING_ACCEPT)
+    ft = FunctionalTable(columns, sorting, SORTING_TRUST)
     @argcheck issorted(ft; lt = (a, b) -> isless_sorting(sorting, a, b))
     ft
 end
 
-function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::SortingPolicy{:prefix})
+function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::SortingPolicy{:try})
     error("not implemented yet, maybe open an issue?")
 end
 
@@ -77,7 +77,7 @@ Returned values need to have the same names (but not necessarily types).
 function FunctionalTable(itr, sortspecs = (), sortingpolicy::SortingPolicy = SORTING_VERIFY;
                          cfg::SinkConfig = SINKCONFIG)
     FunctionalTable(collect_columns(cfg, itr, column_sorting(sortspecs), sortingpolicy)...,
-                    SORTING_ACCEPT)
+                    SORTING_TRUST)
 end
 
 function iterate(ft::FunctionalTable, states...)
@@ -125,7 +125,7 @@ Select a subset of columns from the table.
 """
 function select(ft::FunctionalTable, keep::Keys)
     FunctionalTable(NamedTuple{keep}(ft.columns), select_sorting(ft.sorting, keep),
-                    SORTING_ACCEPT)
+                    SORTING_TRUST)
 end
 
 select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
@@ -147,7 +147,7 @@ function merge(a::FunctionalTable, b::FunctionalTable; replace = false)
         @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
     end
     FunctionalTable(merge(a.columns, b.columns), merge_sorting(a.sorting, keys(b)),
-                    SORTING_ACCEPT)
+                    SORTING_TRUST)
 end
 
 """
@@ -168,4 +168,4 @@ merge(ft::FunctionalTable, f::Callable; cfg = SINKCONFIG, replace = false) =
     merge(ft, map(f, ft; cfg = cfg); replace = replace)
 
 filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
-    FunctionalTable(Iterators.filter(f, ft), getsorting(ft), SORTING_ACCEPT)
+    FunctionalTable(Iterators.filter(f, ft), getsorting(ft), SORTING_TRUST)
