@@ -172,6 +172,13 @@ function _retained_sorting(a, b, cs::ColumnSort, rest...)
     end
 end
 
+"""
+$(TYPEDEF)
+
+Policy for dealing with specified sortings.
+
+See [`VerifySorting`](@ref), [`TrustSorting`](@ref), and [`TrySorting`](@ref).
+"""
 struct SortingPolicy{K}
     function SortingPolicy{K}() where K
         @argcheck K ∈ (:trust, :verify, :try)
@@ -179,8 +186,18 @@ struct SortingPolicy{K}
     end
 end
 
-const TrustSorting = SortingPolicy{:trust}
-
+"Verify that the specified sorting holds. This is the default sorting policy."
 const VerifySorting = SortingPolicy{:verify}
 
+"""
+Accept the specified sorting to hold without any checks (except for verifying that column
+names are valid).
+
+!!! note
+    This can lead to incorrect results, use cautiously. [`VerifySorting`](@ref) is
+    recommended instead as it has little overhead.
+"""
+const TrustSorting = SortingPolicy{:trust}
+
+"Try the specified sorting, then gracefully degrade to a subset of it that holds."
 const TrySorting = SortingPolicy{:try}
