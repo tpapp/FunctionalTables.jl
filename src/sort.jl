@@ -4,7 +4,7 @@
 
 function sort_in_memory(ft::FunctionalTable, cs::ColumnSorting)
     FunctionalTable(sort!(collect(ft), lt = (a, b) -> isless_sorting(cs, a, b)),
-                    cs, SORTING_TRUST)
+                    cs, TrustSorting())
 end
 
 function Base.sort(ft::FunctionalTable, sortspecs)

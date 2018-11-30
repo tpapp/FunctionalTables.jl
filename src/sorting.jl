@@ -4,7 +4,7 @@
 ##### Actual sorting is implemented in sort.jl.
 #####
 
-export SORTING_TRUST, SORTING_TRY, SORTING_VERIFY
+export TrustSorting, TrySorting, VerifySorting
 
 ####
 ####
@@ -179,8 +179,8 @@ struct SortingPolicy{K}
     end
 end
 
-const SORTING_TRUST = SortingPolicy{:trust}()
+const TrustSorting = SortingPolicy{:trust}
 
-const SORTING_VERIFY = SortingPolicy{:verify}()
+const VerifySorting = SortingPolicy{:verify}
 
-const SORTING_TRY = SortingPolicy{:try}()
+const TrySorting = SortingPolicy{:try}
