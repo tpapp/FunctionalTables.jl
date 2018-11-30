@@ -17,6 +17,6 @@ include("columns.jl")
 include("functionaltables.jl")
 include("tables-interface.jl")
 include("sort.jl")
-include("grouping.jl")
+include("by.jl")
 
 end # module

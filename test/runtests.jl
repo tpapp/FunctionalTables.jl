@@ -8,6 +8,10 @@ import Tables
 
 include("utilities.jl")         # utilities for tests
 
+####
+#### Utilities and low-level building blocks
+####
+
 @testset "narrow" begin
     @test narrow(1) ≡ true
     @test narrow(-9) ≡ Int8(-9)
@@ -38,6 +42,13 @@ end
     a1 = append1(ones(Int8, 2), missing)
     @test eltype(a1) ≡ Union{Missing, Int8}
     @test [1, 1, missing] ≅ a1
+end
+
+@testset "splitting named tuples" begin
+    s = NamedTuple{(:a, :c)}
+    @test split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
+    @test split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
+    @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
 end
 
 @testset "collect by names" begin
@@ -79,12 +90,9 @@ end
     @test sorting ≡ column_sorting(())
 end
 
-@testset "splitting named tuples" begin
-    s = NamedTuple{(:a, :c)}
-    @test split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
-    @test split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
-    @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
-end
+####
+#### Sorting building blocks
+####
 
 @testset "column sorting specifications" begin
     @test column_sorting((:a, :b => reverse, ColumnSort(:c, false))) ==
@@ -107,6 +115,10 @@ end
     @test @inferred(retained_sorting(column_sorting(()), row, row)) ≡ column_sorting(())
 end
 
+####
+#### FunctionalTable API
+####
+
 @testset "FunctionalTable basics and column operations" begin
     A = 1:10
     B = 'a':('a'+9)
@@ -125,6 +137,7 @@ end
     @test cols.a == A && cols.a ≢ A
     @test cols.b == B && cols.b ≢ B
     @test cols.c == C && cols.c ≢ C
+    @test FunctionalTable(ft) ≡ ft # same object
 end
 
 @testset "merge sorting" begin
