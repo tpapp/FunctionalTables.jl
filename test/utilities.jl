@@ -13,7 +13,7 @@
 ≅(a::Tuple, b::Tuple) = length(a) == length(b) && all(a .≅ b)
 
 function ≅(a::FunctionalTable, b::FunctionalTable)
-    keys(a.columns) === keys(b.columns) && a.sorting == b.sorting && a.len == b.len &&
+    keys(a.columns) === keys(b.columns) && a.ordering == b.ordering && a.len == b.len &&
         all(((ac, bc), ) -> collect(ac) ≅ collect(bc),
             zip(values(a.columns), values(b.columns)))
 end
