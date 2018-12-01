@@ -133,7 +133,7 @@ When `f` returns just a single row (eg aggregation), wrap by `Ref` to create a
 single-element iterable.
 """
 function Base.map(f, st::SplitTable; cfg = SINKCONFIG)
-    # FIXME: idea: custom ordrring override? would that make sense?
+    # FIXME: idea: custom ordering override? would that make sense?
     FunctionalTable(Iterators.flatten(imap(args -> fuse(f, args...), st)),
                     TrustOrdering(ordering(st)); cfg = cfg)
 end
