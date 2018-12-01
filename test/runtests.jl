@@ -206,21 +206,21 @@ end
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i)
                                                   for i in 1:c], vcat, keycounts),
                          TrustOrdering(:sym, :val))
-    g = by((:sym, ), ft)
+    g = by(ft, (:sym, ))
     cg = collect(g)
     for (i, (s, c)) in enumerate(keycounts)
         @test cg[i] ≅ ((sym = s, ), FunctionalTable((val = 1:c, )))
     end
 
     # empty split keys
-    @test collect(by((), ft)) ≅ [(NamedTuple(), FunctionalTable(ft, VerifyOrdering()))]
+    @test collect(by(ft, ())) ≅ [(NamedTuple(), FunctionalTable(ft, VerifyOrdering()))]
 end
 
 @testset "split by 2" begin
     A = [1, 1, 1, 2, 2]
     B = 'a':'e'
     ft = FunctionalTable((a = A, b = B), VerifyOrdering(:a))
-    g = by((:a, ), ft)
+    g = by(ft, (:a, ))
     @test Base.IteratorSize(g) ≡ Base.SizeUnknown()
     result = collect(g)
     @test result ≅ [((a = 1, ), FunctionalTable((b = ['a', 'b', 'c'],))),
@@ -266,7 +266,7 @@ end
     b = 1:5
     ft = FunctionalTable((a = a, b = b), VerifyOrdering(:a, :b))
     f(_, ft) = map(sum, columns(ft))
-    @test map(Ref ∘ f, by((:a, ), ft)) ≅
+    @test map(Ref ∘ f, by(ft, :a)) ≅
         FunctionalTable((a = [1, 2], b = [6, 9]), TrustOrdering(:a, ))
 end
 

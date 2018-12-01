@@ -108,19 +108,21 @@ end
 """
 $(SIGNATURES)
 
-An iterator that groups rows of tables by the columns `indexkeys`, returning
+An iterator that groups rows of tables by the columns `splitkeys`, returning
 `(index::NamedTupe, table::FunctionalTable)` for each contiguous block of the index keys.
 
 `cfg` is used for collecting `table`.
 """
-by(indexkeys::Keys, ft::FunctionalTable; cfg = SINKVECTORS) = SplitTable{indexkeys}(ft, cfg)
+by(ft::FunctionalTable, splitkeys::Keys; cfg = SINKVECTORS) = SplitTable{splitkeys}(ft, cfg)
+
+by(ft::FunctionalTable, splitkeys::Symbol...; kwargs...) = by(ft, splitkeys; kwargs...)
 
 """
 $(SIGNATURES)
 
 Map a table split with [`by`](@ref) using `f`.
 
-Specifically, `f(indexkeys, table)` receives the index keys (a `NamedTuple`) and a
+Specifically, `f(index, table)` receives the split index (a `NamedTuple`) and a
 `FunctionalTable`.
 
 It is supposed to return an *iterable* that returns rows (can be a `FunctionalTable`). These
