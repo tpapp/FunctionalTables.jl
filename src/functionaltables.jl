@@ -36,8 +36,13 @@ Return the ordering of the table, which is a tuple of `ColumnOrdering` objects.
 """
 ordering(ft::FunctionalTable) = ft.ordering
 
-# just to skip iterating, FIXME introduce re-constructor with sorting, sink-config, etc?
-FunctionalTable(ft::FunctionalTable) = ft
+function FunctionalTable(ft::FunctionalTable,
+                         ordering_rule::OrderingRule{K} = VerifyOrdering()) where K
+    @unpack ordering = ordering_rule
+    K ≡ :trust && return FunctionalTable(ft.columns, ordering_rule)
+    rule = is_prefix(ordering, ft.ordering) ? TrustOrdering(ordering) : ordering_rule
+    FunctionalTable(ft.columns, rule)
+end
 
 function FunctionalTable(columns::NamedTuple,
                          ordering_rule::VerifyOrdering = VerifyOrdering(()))

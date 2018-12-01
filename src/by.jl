@@ -62,7 +62,7 @@ struct SplitTable{K, T <: FunctionalTable, C <: SinkConfig}
     ft::T
     cfg::C
     function SplitTable{K}(ft::T, cfg::C) where {K, T <: FunctionalTable, C <: SinkConfig}
-        @argcheck is_ordered_subset(K, orderkey.(ft.ordering))
+        @argcheck is_prefix(K, orderkey.(ft.ordering))
         new{K, T, C}(ft)
     end
 end

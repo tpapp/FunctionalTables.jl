@@ -35,6 +35,9 @@ function dropkeys(ftkeys::Keys, drop::Keys)
     tuple(setdiff(ftkeys, drop)...)
 end
 
+# FIXME: is keys_following and is_ordered_subset used anywhere?
+# If not, remove.
+
 """
 $(SIGNATURES)
 
@@ -44,7 +47,8 @@ keys_following(key::Symbol, rest::Keys) = _keys_following(key, rest...)
 
 _keys_following(key) = ()
 
-_keys_following(key, rest...) = key ≡ first(rest) ? rest : _keys_following(key, rest...)
+_keys_following(key, rest...) =
+    key ≡ first(rest) ? rest : _keys_following(key, Base.tail(rest)...)
 
 """
 $(SIGNATURES)
@@ -59,6 +63,13 @@ function _is_ordered_subset(b, a_first, a_rest...)
     following = keys_following(a_first, b)
     isempty(following) ? false : _is_ordered_subset(Base.tail(following), a_rest...)
 end
+
+"""
+$(SIGNATURES)
+
+Test if `b` starts with `a`.
+"""
+is_prefix(a, b) = length(a) ≤ length(b) && all(a == b for (a,b) in zip(a, b))
 
 ####
 #### Container element type management

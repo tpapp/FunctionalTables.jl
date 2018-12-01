@@ -1,7 +1,7 @@
 using FunctionalTables, Test
 using FunctionalTables:
     # utilities
-    cancontain, narrow, append1, split_namedtuple,
+    cancontain, narrow, append1, split_namedtuple, is_ordered_subset, is_prefix,
     # column ordering building blocks
     ColumnOrdering, merge_ordering, table_ordering, cmp_ordering, retained_ordering,
     ordering_repr
@@ -90,6 +90,15 @@ end
     @test ordering ≡ TrustOrdering()
 end
 
+@testset "is_prefix" begin
+    @test is_prefix((:a, ), (:a, :b, :c))
+    @test is_prefix((:a, :b, :c), (:a, :b, :c))
+    @test is_prefix((), ())
+    @test !is_prefix((:b, :c), (:a, :b, :c))
+    @test !is_prefix((:b, ), ())
+    @test !is_prefix((:b, :c, :a), (:a, :b, :c))
+end
+
 ####
 #### Ordering building blocks
 ####
@@ -104,6 +113,13 @@ end
     @test ordering_repr(table_ordering((:a, :b => reverse))) == "ordering ↑a ↓b"
 end
 
+@testset "merge ordering" begin
+    o = table_ordering((:a, :b, :c))
+    @test merge_ordering(o, (:d, :e)) ≡ o
+    @test merge_ordering(o, (:c, :b)) ≡ table_ordering((:a, ))
+    @test merge_ordering(o, (:a, :b, :c)) ≡ table_ordering(())
+end
+
 @testset "retained ordering" begin
     o = table_ordering((:a, :b => reverse))
     row = (a = 1, b = 2, c = 3)
@@ -111,6 +127,14 @@ end
     @test retained_ordering(o, row, (a = 2, b = 1, c = -1)) ≡ o
     @test retained_ordering(o, row, (a = 2, b = 3, c = -1)) ≡ table_ordering((:a, ))
     @test @inferred(retained_ordering(table_ordering(()), row, row)) ≡ table_ordering(())
+end
+
+@testset "ordered subsets" begin
+    @test is_ordered_subset((:a, :b), (:a, :b, :c))
+    @test is_ordered_subset((:a, :c), (:a, :b, :c))
+    @test !is_ordered_subset((:c, :a), (:a, :b, :c))
+    @test !is_ordered_subset((:d, :a), (:a, :b, :c))
+    @test is_ordered_subset((), ())
 end
 
 ####
@@ -136,13 +160,6 @@ end
     @test cols.b == B && cols.b ≢ B
     @test cols.c == C && cols.c ≢ C
     @test FunctionalTable(ft) ≡ ft # same object
-end
-
-@testset "merge ordering" begin
-    o = table_ordering((:a, :b, :c))
-    @test merge_ordering(o, (:d, :e)) ≡ o
-    @test merge_ordering(o, (:c, :b)) ≡ table_ordering((:a, ))
-    @test merge_ordering(o, (:a, :b, :c)) ≡ table_ordering(())
 end
 
 @testset "merging" begin
@@ -194,6 +211,9 @@ end
     for (i, (s, c)) in enumerate(keycounts)
         @test cg[i] ≅ ((sym = s, ), FunctionalTable((val = 1:c, )))
     end
+
+    # empty split keys
+    @test collect(by((), ft)) ≅ [(NamedTuple(), FunctionalTable(ft, VerifyOrdering()))]
 end
 
 @testset "split by 2" begin
