@@ -1,9 +1,10 @@
 using FunctionalTables, Test
 using FunctionalTables:
     # utilities
-    cancontain, narrow, append1, split_namedtuple, merge_sorting,
-    # column sorting building blocks
-    ColumnSort, column_sorting, cmp_sorting, retained_sorting
+    cancontain, narrow, append1, split_namedtuple,
+    # column ordering building blocks
+    ColumnOrdering, merge_ordering, table_ordering, cmp_ordering, retained_ordering,
+    ordering_repr
 import Tables
 
 include("utilities.jl")         # utilities for tests
@@ -53,13 +54,13 @@ end
 
 @testset "collect by names" begin
     itr = [(a = i, b = Float64(i), c = 'a' + i - 1) for i in 1:10]
-    sorting = column_sorting((:a, :b, :c))
-    result, s = collect_columns(SinkConfig(;useRLE = false), itr, sorting, TrustSorting())
+    ordering = table_ordering((:a, :b, :c))
+    result, rule = collect_columns(SinkConfig(;useRLE = false), itr, TrustOrdering(ordering))
     @test result isa NamedTuple{(:a, :b, :c), Tuple{Vector{Int8}, Vector{Float64}, Vector{Char}}}
     @test result.a ≅ 1:10
     @test result.b ≅ Float64.(1:10)
     @test result.c ≅ (0:9) .+ 'a'
-    @test s ≡ sorting
+    @test rule ≡ TrustOrdering(ordering)
 end
 
 @testset "simple RLE" begin
@@ -84,35 +85,32 @@ end
 
 @testset "large collection" begin
     v = randvector(1000)
-    columns, sorting = collect_columns(SINKCONFIG, [(a = a, ) for a in v],
-                                       column_sorting(()), TrustSorting())
+    columns, ordering = collect_columns(SINKCONFIG, [(a = a, ) for a in v], TrustOrdering())
     @test collect(columns.a) ≅ v
-    @test sorting ≡ column_sorting(())
+    @test ordering ≡ TrustOrdering()
 end
 
 ####
-#### Sorting building blocks
+#### Ordering building blocks
 ####
 
-@testset "column sorting specifications" begin
-    @test column_sorting((:a, :b => reverse, ColumnSort(:c, false))) ==
-        FunctionalTables.ColumnSorting((ColumnSort(:a, false), ColumnSort(:b, true),
-                                        ColumnSort(:c, false)))
-    @test_throws ArgumentError column_sorting(("foobar", "baz")) # invalid
-    @test_throws ArgumentError column_sorting((:a, :a))          # duplicate
-    @test_throws ArgumentError column_sorting((:a, :a), (:b, ))  # not in set
+@testset "column ordering specifications" begin
+    @test table_ordering((:a, :b => reverse, ColumnOrdering(:c, false))) ==
+        (ColumnOrdering(:a, false), ColumnOrdering(:b, true), ColumnOrdering(:c, false))
+    @test_throws ArgumentError table_ordering(("foobar", "baz")) # invalid
+    @test_throws ArgumentError TrustOrdering(:a, :a)             # duplicate
 
-    @test repr(column_sorting(())) == "no sorting"
-    @test repr(column_sorting((:a, :b => reverse))) == "sorting ↑a ↓b"
+    @test ordering_repr(()) == "no ordering"
+    @test ordering_repr(table_ordering((:a, :b => reverse))) == "ordering ↑a ↓b"
 end
 
-@testset "retained sorting" begin
-    s = column_sorting((:a, :b => reverse))
+@testset "retained ordering" begin
+    o = table_ordering((:a, :b => reverse))
     row = (a = 1, b = 2, c = 3)
-    @test retained_sorting(s, row, row) ≡ s
-    @test retained_sorting(s, row, (a = 2, b = 1, c = -1)) ≡ s
-    @test retained_sorting(s, row, (a = 2, b = 3, c = -1)) ≡ column_sorting((:a, ))
-    @test @inferred(retained_sorting(column_sorting(()), row, row)) ≡ column_sorting(())
+    @test retained_ordering(o, row, row) ≡ o
+    @test retained_ordering(o, row, (a = 2, b = 1, c = -1)) ≡ o
+    @test retained_ordering(o, row, (a = 2, b = 3, c = -1)) ≡ table_ordering((:a, ))
+    @test @inferred(retained_ordering(table_ordering(()), row, row)) ≡ table_ordering(())
 end
 
 ####
@@ -128,11 +126,11 @@ end
     @test eltype(ft) ≡ typeof((a = first(A), b = first(B), c = first(C)))
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
-    @test keys(ft) == (:a, :b, :c)
+    @test keys(columns(ft)) == (:a, :b, :c)
     @test select(ft, (:a, :b)) ≅ FunctionalTable((a = A, b = B)) ≅ select(ft, :a, :b)
     @test select(ft; drop = (:a, :b)) ≅ FunctionalTable((c = C,))
     @test FunctionalTable(ft) ≅ ft
-    cols = columns(ft; mutable = true, vector = true)
+    cols = map(collect, columns(ft))
     @test all(isa.(values(cols), AbstractVector))
     @test cols.a == A && cols.a ≢ A
     @test cols.b == B && cols.b ≢ B
@@ -140,11 +138,11 @@ end
     @test FunctionalTable(ft) ≡ ft # same object
 end
 
-@testset "merge sorting" begin
-    s = column_sorting((:a, :b, :c))
-    @test merge_sorting(s, (:d, :e)) ≡ s
-    @test merge_sorting(s, (:c, :b)) ≡ column_sorting((:a, ))
-    @test merge_sorting(s, (:a, :b, :c)) ≡ column_sorting(())
+@testset "merge ordering" begin
+    o = table_ordering((:a, :b, :c))
+    @test merge_ordering(o, (:d, :e)) ≡ o
+    @test merge_ordering(o, (:c, :b)) ≡ table_ordering((:a, ))
+    @test merge_ordering(o, (:a, :b, :c)) ≡ table_ordering(())
 end
 
 @testset "merging" begin
@@ -152,45 +150,45 @@ end
     B = 'a':('a'+9)
     C = Float64.(21:30)
     A2 = .-A
-    ft = FunctionalTable((a = A, b = B), (:a, :b))
+    ft = FunctionalTable((a = A, b = B), VerifyOrdering(:a, :b))
     @test merge(ft, FunctionalTable((c = C, ))) ≅
-        FunctionalTable((a = A, b = B, c = C), (:a, :b))
+        FunctionalTable((a = A, b = B, c = C), VerifyOrdering(:a, :b))
     @test_throws ArgumentError merge(ft, FunctionalTable((c = C, a = A2)))
     @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
-        FunctionalTable((a = A2, b = B, c = C), ())
+        FunctionalTable((a = A2, b = B, c = C))
 end
 
 @testset "map (direct)" begin
     A = 1:10
     B = 'a':('a'+9)
-    ft = FunctionalTable((a = A, b = B), (:a, :b))
+    ft = FunctionalTable((a = A, b = B), VerifyOrdering(:a, :b))
     f(row) = (b = row.a + 1, c = row.b + 2)
     B2 = A .+ 1
     C = collect(B .+ 2)
     ft2 = map(f, ft)
-    # NOTE map removes sorting
+    # NOTE map removes ordering
     @test ft2 ≅ FunctionalTable((b = B2, c = C))
-    ft3 = merge(ft, f; replace = true)
-    # NOTE as :b is replaced, its sorting is removed
-    @test ft3 ≅ FunctionalTable((a = A, b = B2, c = C), (:a, ))
+    ft3 = merge(f, ft; replace = true)
+    # NOTE as :b is replaced, its ordering is removed
+    @test ft3 ≅ FunctionalTable((a = A, b = B2, c = C), VerifyOrdering((:a, )))
     # overlap, without replacement
-    @test_throws ArgumentError merge(ft, f)
+    @test_throws ArgumentError merge(f, ft)
 end
 
 @testset "filter" begin
     A = 1:5
     B = 'a':'e'
-    s = (:a, :b)
-    ft = FunctionalTable((a = A, b = B), s)
+    o = VerifyOrdering(:a, :b)
+    ft = FunctionalTable((a = A, b = B), o)
     @test filter(row -> isodd(row.a), ft) ≅
-        FunctionalTable((a = [1, 3, 5], b = ['a', 'c', 'e']), s)
+        FunctionalTable((a = [1, 3, 5], b = ['a', 'c', 'e']), o)
 end
 
 @testset "split by 1" begin
     keycounts = [:a => 10, :b => 17, :c => 19]
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i)
                                                   for i in 1:c], vcat, keycounts),
-                         (:sym, :val))
+                         TrustOrdering(:sym, :val))
     g = by((:sym, ), ft)
     cg = collect(g)
     for (i, (s, c)) in enumerate(keycounts)
@@ -201,7 +199,7 @@ end
 @testset "split by 2" begin
     A = [1, 1, 1, 2, 2]
     B = 'a':'e'
-    ft = FunctionalTable((a = A, b = B), (:a, ))
+    ft = FunctionalTable((a = A, b = B), VerifyOrdering(:a))
     g = by((:a, ), ft)
     @test Base.IteratorSize(g) ≡ Base.SizeUnknown()
     result = collect(g)
@@ -223,13 +221,13 @@ end
     @test Tables.schema(Tables.columns(ft)) == Tables.schema(Tables.columns(cols))
 end
 
-@testset "column sort comparisons" begin
-    sorting = column_sorting((:a, :b => reverse))
-    @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (a = 1, b = 2)) == 0
-    @test @inferred cmp_sorting(sorting, (a = 1, b = 3), (a = 1, b = 2)) == -1
-    @test @inferred cmp_sorting(sorting, (a = 0, b = 3), (a = 1, b = 2)) == -1
-    @test @inferred cmp_sorting(sorting, (a = 1, b = 2), (b = 2, a = 1)) == 0 # order irrelevant
-    @test_throws ErrorException cmp_sorting(sorting, (c = 1, ), (c = 1, ))    # no such field
+@testset "ordering comparisons" begin
+    ordering = table_ordering((:a, :b => reverse))
+    @test @inferred cmp_ordering(ordering, (a = 1, b = 2), (a = 1, b = 2)) == 0
+    @test @inferred cmp_ordering(ordering, (a = 1, b = 3), (a = 1, b = 2)) == -1
+    @test @inferred cmp_ordering(ordering, (a = 0, b = 3), (a = 1, b = 2)) == -1
+    @test @inferred cmp_ordering(ordering, (a = 1, b = 2), (b = 2, a = 1)) == 0 # order irrelevant
+    @test_throws ErrorException cmp_ordering(ordering, (c = 1, ), (c = 1, ))    # no such field
 end
 
 @testset "sort" begin
@@ -240,53 +238,51 @@ end
     @test sft ≅ FunctionalTable((a = [3, 2, 1, 1, -1],
                                  b = [1, 2, 2, 2, 2],
                                  c = [3, 5, 1, 4, 2]),
-                                (:b, :a => reverse))
+                                VerifyOrdering(:b, :a => reverse))
 end
 
 @testset "map by" begin
     a = [1, 1, 1, 2, 2]
     b = 1:5
-    ft = FunctionalTable((a = a, b = b), (:a, :b))
+    ft = FunctionalTable((a = a, b = b), VerifyOrdering(:a, :b))
     f(_, ft) = map(sum, columns(ft))
-    @test map(Ref ∘ f, by((:a, ), ft)) ≅ FunctionalTable((a = [1, 2], b = [6, 9]), (:a, ))
+    @test map(Ref ∘ f, by((:a, ), ft)) ≅
+        FunctionalTable((a = [1, 2], b = [6, 9]), TrustOrdering(:a, ))
 end
 
-@testset "corner cases for collecting and sorting" begin
+@testset "corner cases for collecting and ordering" begin
     A = (a = 1, )
     AA = [A, A]
 
     # different keys by row
     @test_throws ArgumentError FunctionalTable([A, (a = 1, b = 2)])
 
-    # field specified by sorting is missing
-    @test_throws ErrorException FunctionalTable(AA, (:b, ))
+    # field specified by ordering is missing
+    @test_throws ErrorException FunctionalTable(AA, VerifyOrdering(:b, ))
+    @test_throws ArgumentError FunctionalTable(AA, TrustOrdering(:b, ))
 
-    # prefix narrows sorting silently
-    @test FunctionalTable(AA, (:b, ), TrySorting()) ≅ FunctionalTable(AA)
-
-    # sorting keys not contained in columns
-    @test_throws ArgumentError FunctionalTable((AA, (:b, ), TrustSorting()))
-    @test_throws ArgumentError FunctionalTable((AA, (:b, ), VerifySorting()))
+    # prefix narrows ordering silently
+    @test FunctionalTable(AA, TryOrdering(:b)) ≅ FunctionalTable(AA)
 
     # FIXME not implemented yet
-    @test_skip FunctionalTable((a = [2, 1], ), (:a, ), TrySorting()) ≅
-        FunctionalTable((a = [1, 2], ), (), TrustSorting())
+    @test_skip FunctionalTable((a = [2, 1], ), (:a, ), TryOrdering()) ≅
+        FunctionalTable((a = [1, 2], ), (), TrustOrdering())
 end
 
 @testset "printing" begin
-    ft = FunctionalTable((a = [1, 2], b = [3, 4]), (:a, :b => reverse), TrustSorting())
+    ft = FunctionalTable((a = [1, 2], b = [3, 4]), TrustOrdering(:a, :b => reverse))
     reprft = """
-    FunctionalTable of 2 rows, sorting ↑a ↓b
+    FunctionalTable of 2 rows, ordering ↑a ↓b
         a = Int64[1, 2]
         b = Int64[3, 4]"""
     @test repr(ft) == reprft
 end
 
-@testset "take" begin
+@testset "head" begin
     a = 1:1000
     b = fill(9, length(a))
     rt = Tables.rowtable((a = a, b = b))
-    s = (:a, :b)
+    s = VerifyOrdering(:a, :b)
     ft = FunctionalTable(rt, s)
     @test head(ft, 100) ≅ FunctionalTable(Iterators.take(rt, 100), s)
 end

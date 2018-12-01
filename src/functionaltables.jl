@@ -1,69 +1,63 @@
-export FunctionalTable, columns, select, head
+export FunctionalTable, columns, ordering, select, head
 
-struct FunctionalTable{C <: NamedTuple, S <: ColumnSorting}
+struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
     len::Int
     columns::C
-    sorting::S
-    function FunctionalTable(columns::C, sorting::S, ::TrustSorting
-                             ) where {C <: NamedTuple, S <: ColumnSorting}
+    ordering::O
+    function FunctionalTable(columns::C, ordering_rule::R
+                             ) where {C <: NamedTuple, R <: TrustOrdering}
+        @unpack ordering = ordering_rule
         @argcheck !isempty(columns) "At least one column is needed."
         len = length(first(columns))
         @argcheck all(column -> length(column) == len, Base.tail(values(columns)))
-        checkvalidkeys(keys(sorting), keys(columns))
-        new{C, S}(len, columns, sorting)
+        checkvalidkeys(orderkey.(ordering), keys(columns))
+        new{C, typeof(ordering)}(len, columns, ordering)
     end
 end
-
-# just to skip iterating, FIXME introduce re-constructor with sorting, sink-config, etc?
-FunctionalTable(ft::FunctionalTable) = ft
-
-function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::VerifySorting)
-    ft = FunctionalTable(columns, sorting, TrustSorting())
-    @argcheck issorted(ft; lt = (a, b) -> isless_sorting(sorting, a, b))
-    ft
-end
-
-function FunctionalTable(columns::NamedTuple, sorting::ColumnSorting, ::TrySorting)
-    error("not implemented yet, maybe open an issue?")
-end
-
-FunctionalTable(columns::NamedTuple, sortspecs = (),
-                sortingpolicy::SortingPolicy = VerifySorting()) =
-    FunctionalTable(columns, column_sorting(sortspecs, keys(columns)), sortingpolicy)
-
-keys(ft::FunctionalTable) = keys(ft.columns)
-
-IteratorSize(::FunctionalTable) = Base.HasLength()
-
-length(ft::FunctionalTable) = ft.len
-
-IteratorEltype(::FunctionalTable) = Base.HasEltype()
-
-eltype(ft::FunctionalTable) = NamedTuple{keys(ft), Tuple{map(eltype, values(ft.columns))...}}
-
-getsorting(ft::FunctionalTable) = ft.sorting
 
 """
 $(SIGNATURES)
 
 Return the columns in a `NamedTuple`.
 
-When `mutable`, all columns will be mutable `<: AbstractVector`, and not share (shallow)
-structure.
+Each column is an iterable, but not necessarily an `<: AbstractVector`.
 
-When `vector`, all columns will be `<: AbstractVector`, but may be immutable or share
-structure.
+!!! note
+    **Never mutate columns obtained by this method**, as that will violate invariants
+    assumed by the implementation. Use `map(collect, columns(ft))` or similar to obtain
+    mutable vectors.
 """
-function columns(ft::FunctionalTable; vector = false, mutable = false)
-    map(ft.columns) do c
-        if c isa AbstractVector
-            mutable ? collect(c) : c
-        else
-            (vector | mutable) ? collect(c) : c
-        end
-    end
+columns(ft::FunctionalTable) = ft.columns
+
+"""
+$(SIGNATURES)
+
+Return the ordering of the table, which is a tuple of `ColumnOrdering` objects.
+"""
+ordering(ft::FunctionalTable) = ft.ordering
+
+# just to skip iterating, FIXME introduce re-constructor with sorting, sink-config, etc?
+FunctionalTable(ft::FunctionalTable) = ft
+
+function FunctionalTable(columns::NamedTuple,
+                         ordering_rule::VerifyOrdering = VerifyOrdering(()))
+    ft = FunctionalTable(columns, TrustOrdering(ordering_rule))
+    @argcheck issorted(ft; lt = (a, b) -> isless_ordering(ft.ordering, a, b))
+    ft
 end
 
+function FunctionalTable(columns::NamedTuple, ::TryOrdering)
+    error("not implemented yet, maybe open an issue?")
+end
+
+Base.IteratorSize(::FunctionalTable) = Base.HasLength()
+
+Base.length(ft::FunctionalTable) = ft.len
+
+Base.IteratorEltype(::FunctionalTable) = Base.HasEltype()
+
+Base.eltype(ft::FunctionalTable) =
+    NamedTuple{keys(ft.columns), Tuple{map(eltype, values(ft.columns))...}}
 
 """
 $(SIGNATURES)
@@ -72,18 +66,18 @@ Create a `FunctionalTable` from an iterable that returns `NamedTuple`s.
 
 Returned values need to have the same names (but not necessarily types).
 
-`sorting` specifies sorting, and is a tuple of `:key` or `:key => reverse` elements.
+`ordering_rule` specifies sorting. The `VerifyOrdering` (default), `TrustOrdering`, and
+`TryOrdering`  constructors take a tuple of a tuple of `:key` or `:key => reverse` elements.
 
 `cfg` determines sink configuration for collecting elements of the columns, see
 [`SinkConfig`](@ref).
 """
-function FunctionalTable(itr, sortspecs = (), sortingpolicy::SortingPolicy = VerifySorting();
+function FunctionalTable(itr, ordering_rule::OrderingRule = TrustOrdering();
                          cfg::SinkConfig = SINKCONFIG)
-    FunctionalTable(collect_columns(cfg, itr, column_sorting(sortspecs), sortingpolicy)...,
-                    TrustSorting())
+    FunctionalTable(collect_columns(cfg, itr, ordering_rule)...)
 end
 
-function iterate(ft::FunctionalTable, states...)
+function Base.iterate(ft::FunctionalTable, states...)
     ys = map(iterate, ft.columns, states...)
     any(isequal(nothing), ys) && return nothing
     map(first, ys), map(last, ys)
@@ -104,9 +98,9 @@ function _showcolcontents(io::IO, itr)
     print(io, "]")
 end
 
-function show(io::IO, ft::FunctionalTable)
-    @unpack len, columns, sorting = ft
-    print(io, "FunctionalTable of $(len) rows, ", sorting)
+function Base.show(io::IO, ft::FunctionalTable)
+    @unpack len, columns, ordering = ft
+    print(io, "FunctionalTable of $(len) rows, ", ordering_repr(ordering))
     ioc = IOContext(io, :compact => true)
     for (key, col) in pairs(ft.columns)
         println(ioc)
@@ -127,13 +121,13 @@ Select a subset of columns from the table.
 `select(ft; drop = keys)` is a convenience form for keeping **all but** the given columns.
 """
 function select(ft::FunctionalTable, keep::Keys)
-    FunctionalTable(NamedTuple{keep}(ft.columns), select_sorting(ft.sorting, keep),
-                    TrustSorting())
+    FunctionalTable(NamedTuple{keep}(ft.columns),
+                    TrustOrdering(select_ordering(ft.ordering, keep)))
 end
 
 select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
 
-select(ft::FunctionalTable; drop::Keys) = select(ft, dropkeys(keys(ft), drop))
+select(ft::FunctionalTable; drop::Keys) = select(ft, dropkeys(keys(ft.columns), drop))
 
 """
 $(SIGNATURES)
@@ -143,35 +137,34 @@ Merge two `FunctionalTable`s.
 When `replace == true`, columns in the first one are replaced by second one, otherwise an
 error is thrown if column names overlap.
 """
-function merge(a::FunctionalTable, b::FunctionalTable; replace = false)
+function Base.merge(a::FunctionalTable, b::FunctionalTable; replace = false)
     @argcheck length(a) == length(b)
     if !replace
-        dup = tuple((keys(a) ∩ keys(b))...)
+        dup = tuple((keys(a.columns) ∩ keys(b.columns))...)
         @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
     end
-    FunctionalTable(merge(a.columns, b.columns), merge_sorting(a.sorting, keys(b)),
-                    TrustSorting())
+    FunctionalTable(merge(a.columns, b.columns),
+                    TrustOrdering(merge_ordering(a.ordering, keys(b.columns))))
 end
 
 """
 $(SIGNATURES)
 """
-map(f::Callable, ft::FunctionalTable; cfg = SINKCONFIG) =
-    FunctionalTable(imap(f, ft); cfg = cfg)
+Base.map(f, ft::FunctionalTable; cfg = SINKCONFIG) = FunctionalTable(imap(f, ft); cfg = cfg)
 
 """
 $(SIGNATURES)
 
-Map `ft` using `f` by rows, then `merge` the two. See
-[`map(::Callable,::FunctionalTable)`](@ref).
+Map `ft` using `f` by rows, then `merge` the two. See [`map(f, ::FunctionalTable)`](@ref).
 
 `cfg` is passed to `map`, `replace` governs replacement of overlapping columns in `merge`.
 """
-merge(ft::FunctionalTable, f::Callable; cfg = SINKCONFIG, replace = false) =
+function Base.merge(f, ft::FunctionalTable; cfg = SINKCONFIG, replace = false)
     merge(ft, map(f, ft; cfg = cfg); replace = replace)
+end
 
-filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
-    FunctionalTable(Iterators.filter(f, ft), getsorting(ft), TrustSorting())
+Base.filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
+    FunctionalTable(Iterators.filter(f, ft), TrustOrdering(ft.ordering))
 
 """
 $(SIGNATURES)
@@ -179,4 +172,4 @@ $(SIGNATURES)
 A `FunctionalTable` of the first `n` rows. For previews etc.
 """
 head(ft::FunctionalTable, n::Integer) =
-    FunctionalTable(Iterators.take(ft, n), getsorting(ft), TrustSorting())
+    FunctionalTable(Iterators.take(ft, n), TrustOrdering(ft.ordering))

@@ -156,11 +156,11 @@ end
 
 finalize_sink(::SinkConfig, rle::RLEVector) = rle
 
-eltype(::RLEVector{C,T,S}) where {C,T,S} = Base.promote_typejoin(T,S)
+Base.eltype(::RLEVector{C,T,S}) where {C,T,S} = Base.promote_typejoin(T,S)
 
-length(rle::RLEVector{C,T,S}) where {C,T,S} = sum(abs ∘ Int, rle.counts)
+Base.length(rle::RLEVector{C,T,S}) where {C,T,S} = sum(abs ∘ Int, rle.counts)
 
-function iterate(rle::RLEVector{C,T,S},
+function Base.iterate(rle::RLEVector{C,T,S},
                  (countsindex, dataindex, remaining) = (0, 0, zero(C))) where {C,T,S}
     @unpack counts, data = rle
     if remaining < 0
@@ -205,49 +205,46 @@ function collect_column!(sink, cfg::SinkConfig, itr, state)
 end
 
 """
-columns, sorting = $(SIGNATURES)
+columns, ordering_rule = $(SIGNATURES)
 
 Collect results from `itr`, which are supposed to be `NamedTuple`s with the same names, into
 sinks (using config `cfg`), then finalize and return the `NamedTuple` of the columns and the
-sorting (which is `≡ sorting` unless `sortingpolicy ≡ SortingPolicy(:prefix)`).
-
-`sorting` is ignored when `sortingpolicy ≡ SortingPolicy(:accept)`, otherwise used according
-to the value of the latter.
+ordering rule (which is always a `TrustOrdering`, since that was implicit or verified).
 """
-function collect_columns(cfg::SinkConfig, itr, sorting::ColumnSorting,
-                         sortingpolicy::SortingPolicy{K}) where K
+function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R}) where R
     elts, state = @ifsomething iterate(itr)
     @argcheck elts isa NamedTuple
     sinks = make_sinks(cfg, elts)
-    # NOTE about various sorting policies
-    # 1. for :try, we need to narrow sorting so that comparisons make sense,
-    # 2. for :trust, we don't need the last element for comparison, hence the ()
-    collect_columns!(sinks, cfg, itr,
-                     K ≡ :try ? select_sorting(sorting, keys(elts)) : sorting,
-                     sortingpolicy, K ≡ :trust ? () : elts, state)
+    if R ≡ :try
+        # we need to narrow ordering so that comparisons make sense
+        ordering_rule = OrderingRule{R}(select_ordering(ordering_rule.ordering, keys(elts)))
+    end
+    collect_columns!(sinks, cfg, itr, ordering_rule,
+                     # :trust, we don't need the last element for comparison, hence the ()
+                     R ≡ :trust ? () : elts, state)
 end
 
-function collect_columns!(sinks::NamedTuple, cfg, itr,
-                          sorting, sorting_policy::SortingPolicy{K}, lastelts,
-                          state) where K
+function collect_columns!(sinks::NamedTuple, cfg, itr, ordering_rule::OrderingRule{R},
+                          lastelts, state) where R
+    @unpack ordering = ordering_rule
     while true
         y = iterate(itr, state)
-        y ≡ nothing && return finalize_sinks(cfg, sinks), sorting
+        y ≡ nothing && return finalize_sinks(cfg, sinks), TrustOrdering(ordering_rule)
         elts, state = y
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
-        if K ≢ :trust
-            if cmp_sorting(sorting, lastelts, elts) > 0
-                if K ≡ :verify
+        if R ≢ :trust
+            if cmp_ordering(ordering, lastelts, elts) > 0
+                if R ≡ :verify
                     error("Sorting $(sorting) violated: $(lastelts) ≰ $(elts).")
-                else # K ≡ :try
+                else # R ≡ :try
+                    new_ordering = retained_ordering(ordering, lastelts, elts)
                     return collect_columns!(newsinks, cfg, itr,
-                                            retained_sorting(sorting, lastelts, elts),
-                                            sortingpolicy, elts, state)
+                                            OrderingRule{R}(new_ordering), elts, state)
                 end
             end
             lastelts = elts
         end
-        sinks ≡ newsinks || return collect_columns!(newsinks, cfg, itr, sorting,
-                                                    sorting_policy, lastelts, state)
+        sinks ≡ newsinks || return collect_columns!(newsinks, cfg, itr, ordering_rule,
+                                                    lastelts, state)
     end
 end

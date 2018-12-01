@@ -47,10 +47,6 @@ Prepend the `index` as repeated columns to `f(index, tables...)`.
 """
 fuse(f, index::NamedTuple, tables...) = merge_repeated(index, f(index, tables...))
 
-####
-#### iterating grouped values (implementation, internal)
-####
-
 """
 $(TYPEDEF)
 
@@ -66,19 +62,19 @@ struct SplitTable{K, T <: FunctionalTable, C <: SinkConfig}
     ft::T
     cfg::C
     function SplitTable{K}(ft::T, cfg::C) where {K, T <: FunctionalTable, C <: SinkConfig}
-        checkvalidkeys(K, keys(getsorting(ft))) # FIXME rethink: is all that is needed?
+        @argcheck is_ordered_subset(K, orderkey.(ft.ordering))
         new{K, T, C}(ft)
     end
 end
 
-IteratorSize(::Type{<:SplitTable}) = Base.SizeUnknown()
+Base.IteratorSize(::Type{<:SplitTable}) = Base.SizeUnknown()
 
 # FIXME type may be known to a certain extent, <: FunctionalTable?
-IteratorEltype(::Type{<:SplitTable}) = Base.EltypeUnknown()
+Base.IteratorEltype(::Type{<:SplitTable}) = Base.EltypeUnknown()
 
-getsorting(g::SplitTable{K}) where K = select_sorting(getsorting(g.ft), K)
+ordering(st::SplitTable{K}) where K = select_ordering(ordering(st.ft), K)
 
-function iterate(g::SplitTable{K}) where K
+function Base.iterate(g::SplitTable{K}) where K
     @unpack ft, cfg = g
     row, itrstate = @ifsomething iterate(ft)
     firstkey, elts = split_namedtuple(NamedTuple{K}, row)
@@ -86,7 +82,7 @@ function iterate(g::SplitTable{K}) where K
     _collect_block!(sinks, g, firstkey, itrstate)
 end
 
-function iterate(g::SplitTable, state)
+function Base.iterate(g::SplitTable, state)
     sinks, firstkey, itrstate = @ifsomething state
     _collect_block!(sinks, g, firstkey, itrstate)
 end
@@ -135,7 +131,7 @@ When `f` returns just a single row (eg aggregation), wrap by `Ref` to create a
 single-element iterable.
 """
 function Base.map(f, st::SplitTable; cfg = SINKCONFIG)
-    # FIXME: idea: custom sorting override? would that make sense?
+    # FIXME: idea: custom ordrring override? would that make sense?
     FunctionalTable(Iterators.flatten(imap(args -> fuse(f, args...), st)),
-                    getsorting(st), TrustSorting(); cfg = cfg)
+                    TrustOrdering(ordering(st)); cfg = cfg)
 end

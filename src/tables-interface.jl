@@ -6,8 +6,9 @@ Tables.rowaccess(::Type{<:FunctionalTable}) = true
 
 Tables.rows(ft::FunctionalTable) = ft
 
-Tables.schema(ft::FunctionalTable) = Tables.Schema(keys(ft), map(eltype, values(ft.columns)))
+Tables.schema(ft::FunctionalTable) =
+    Tables.Schema(keys(ft.columns), map(eltype, values(ft.columns)))
 
 Tables.columnaccess(::Type{<:FunctionalTable}) = true
 
-Tables.columns(ft::FunctionalTable) = columns(ft; vector = true, mutable = true)
+Tables.columns(ft::FunctionalTable) = map(collect, columns(ft))

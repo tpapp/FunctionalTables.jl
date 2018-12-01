@@ -6,13 +6,8 @@ using Parameters: @unpack
 using IterTools: @ifsomething, imap
 import Tables
 
-using Base: Callable
-import Base:
-    length, eltype, IteratorSize, IteratorEltype, iterate,
-    keys, show, merge, map, filter
-
 include("utilities.jl")
-include("sorting.jl")
+include("ordering.jl")
 include("columns.jl")
 include("functionaltables.jl")
 include("tables-interface.jl")
