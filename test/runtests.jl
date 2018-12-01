@@ -306,3 +306,25 @@ end
     ft = FunctionalTable(rt, s)
     @test head(ft, 100) ≅ FunctionalTable(Iterators.take(rt, 100), s)
 end
+
+@testset "rename" begin
+    ft = FunctionalTable((a = 1:3, b = 4:6), VerifyOrdering(:b, :a => reverse))
+    ft2 = FunctionalTable((aa = 1:3, bb = 4:6), VerifyOrdering(:bb, :aa => reverse))
+    @test rename(ft, (a = :aa, b = :bb)) ≅ ft2
+    @test rename(ft, :a => :aa, :b => :bb) ≅ ft2
+    @test rename(ft, Dict(:a => :aa, :b => :bb)) ≅ ft2
+    @test rename(key -> Symbol(String(key)^2), ft) ≅ ft2
+
+    # extras - error
+    @test_throws ArgumentError rename(ft, Dict(:a => :aa, :b => :bb, :c => :cc))
+
+    # extras - don't error with strict = false
+    @test rename(ft, Dict(:a => :aa, :b => :bb, :c => :cc); strict = false) ≅ ft2
+
+    # duplicate keys
+    @test_throws ErrorException rename(ft, (a = :aa, b = :aa))
+
+    # exchange names
+    @test rename(ft, Dict(:a => :b, :b => :a)) ≅
+        FunctionalTable((b = 1:3, a = 4:6), VerifyOrdering(:a, :b => reverse))
+end

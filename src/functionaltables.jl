@@ -1,4 +1,4 @@
-export FunctionalTable, columns, ordering, select, head
+export FunctionalTable, columns, ordering, select, rename, head
 
 struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
     len::Int
@@ -133,6 +133,61 @@ end
 select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
 
 select(ft::FunctionalTable; drop::Keys) = select(ft, dropkeys(keys(ft.columns), drop))
+
+"""
+$(SIGNATURES)
+
+Rename the columns of a `FunctionalTable`. `changes`, which is an `AbstractDict` or anything
+that supports `pairs` and can be collected into one, maps column names to new names.
+
+When `strict` (the default), the keys of the dictionary are checked to be a subset of
+existing keys, otherwise superfluous keys are ignored.
+
+# Example
+
+```julia
+rename(ft, Dict(:a => :a2, :b => :μ))
+rename(ft, (a = :a2, b = :μ))   # same, using NamedTuple
+```
+"""
+function rename(ft::FunctionalTable, changes::AbstractDict{Symbol, Symbol}; strict = true)
+    @unpack columns, ordering = ft
+    strict && @argcheck keys(changes) ⊆ keys(columns)
+    change(key) = changes[key]
+    newkeys = map(change, keys(columns))
+    newordering = map(o -> ColumnOrdering{change(orderkey(o)), orderrev(o)}(), ordering)
+    FunctionalTable(NamedTuple{newkeys}(values(columns)), TrustOrdering(newordering))
+end
+
+rename(ft::FunctionalTable, @nospecialize changes; strict = true) =
+    rename(ft, Dict(pairs(changes)); strict = strict)
+
+"""
+$(SIGNATURES)
+
+Rename the columns of a `FunctionalTable` using a function that maps symbols to symbols.
+
+# Example
+
+```julia
+rename(key -> Symbol(String(key) * "-mean"), ft) # add "-mean" to each name
+```
+"""
+rename(f, ft::FunctionalTable) =
+    rename(ft, Dict(k => f(k) for k in keys(columns(ft))); strict = false)
+
+"""
+$(SIGNATURES)
+
+Convenience wrapper for `rename(::FunctionalTable, ::AbstractDict)` which constructs the
+change dictionary from pairs. Non-existent keys always error.
+
+```julia
+rename(ft, :a => :a2, :b => :μ)
+```
+"""
+rename(ft::FunctionalTable, pairs::Pair{Symbol, Symbol}...) =
+    rename(ft, Dict(pairs); strict = true)
 
 """
 $(SIGNATURES)
