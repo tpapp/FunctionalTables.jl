@@ -299,6 +299,10 @@ end
     # FIXME not implemented yet
     @test_skip FunctionalTable((a = [2, 1], ), (:a, ), TryOrdering()) ≅
         FunctionalTable((a = [1, 2], ), (), TrustOrdering())
+
+    # nothing in the rows, also special constructor
+    emptyrows = (NamedTuple() for _ in 1:1000)
+    @test FunctionalTable(emptyrows) ≅ FunctionalTable(1000)
 end
 
 @testset "printing" begin

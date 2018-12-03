@@ -47,6 +47,9 @@ function FunctionalTable(columns::NamedTuple, ordering_rule::OrderingRule)
     FunctionalTable(TrustLength(len), columns, ordering_rule)
 end
 
+FunctionalTable(len::Integer) =
+    FunctionalTable(TrustLength(len), NamedTuple(), TrustOrdering())
+
 ####
 #### accessor API
 ####
