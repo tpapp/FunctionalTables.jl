@@ -298,13 +298,13 @@ end
     @test repr(ft) == reprft
 end
 
-@testset "head" begin
+@testset "first" begin
     a = 1:1000
     b = fill(9, length(a))
     rt = Tables.rowtable((a = a, b = b))
     s = VerifyOrdering(:a, :b)
     ft = FunctionalTable(rt, s)
-    @test head(ft, 100) ≅ FunctionalTable(Iterators.take(rt, 100), s)
+    @test first(ft, 100) ≅ FunctionalTable(Iterators.take(rt, 100), s)
 end
 
 @testset "rename" begin
