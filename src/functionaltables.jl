@@ -1,4 +1,4 @@
-export FunctionalTable, columns, ordering, select, rename, head
+export FunctionalTable, columns, ordering, select, rename
 
 struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
     len::Int
@@ -229,7 +229,9 @@ Base.filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
 """
 $(SIGNATURES)
 
-A `FunctionalTable` of the first `n` rows. For previews etc.
+A `FunctionalTable` of the first `n` rows.
+
+Useful for previews and data exploration.
 """
-head(ft::FunctionalTable, n::Integer) =
+Base.first(ft::FunctionalTable, n::Integer) =
     FunctionalTable(Iterators.take(ft, n), TrustOrdering(ft.ordering))
