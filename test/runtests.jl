@@ -207,6 +207,15 @@ end
         FunctionalTable((a = [1, 3, 5], b = ['a', 'c', 'e']), o)
 end
 
+@testset "RepeatRow" begin
+    rr = RepeatRow((a = 1, b = 2))
+    ft = FunctionalTable((a = fill(1, 3), b = fill(2, 3)))
+    @test FunctionalTable(3, rr) ≅ ft
+    ft2 = FunctionalTable((c = 4:6, d = 7:9))
+    @test merge(rr, ft2) ≅ merge(ft, ft2)
+    @test merge(ft2, rr) ≅ merge(ft2, ft)
+end
+
 @testset "split by 1" begin
     keycounts = [:a => 10, :b => 17, :c => 19]
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i)
