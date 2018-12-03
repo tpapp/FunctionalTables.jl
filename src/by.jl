@@ -2,51 +2,60 @@
 ##### Interface and implementation for split-apply-combine.
 #####
 
-export by
+export by, RepeatRow
 
 ####
-#### RepeatedValue type
+#### RepeatValue type
 ####
 
 """
-RepeatedValue(value, len)
+RepeatValue(value, len)
 
 Equivalent to a vector containing `len` instances of `value`. Used *internally*.
 """
-struct RepeatedValue{T} <: AbstractVector{T}
+struct RepeatValue{T} <: AbstractVector{T}
     value::T
     len::Int
 end
 
-Base.size(s::RepeatedValue) = (s.len, )
+Base.size(s::RepeatValue) = (s.len, )
 
-Base.IndexStyle(::Type{<:RepeatedValue}) = Base.IndexLinear()
+Base.IndexStyle(::Type{<:RepeatValue}) = Base.IndexLinear()
 
-function Base.getindex(s::RepeatedValue, i::Integer)
+function Base.getindex(s::RepeatValue, i::Integer)
     @boundscheck checkbounds(s, i)
     s.value
 end
 
 """
-$(SIGNATURES)
+RepeatRow(row)
 
-Make a functional table from `index`, repeating each value for a column to match the length
-of `ft`, then merge the two.
+A row repeated as many times as needed. Can be `merge`d to a `FunctionalTable`, or
+instantiated with `FunctionalTable(len, repeat_row)`.
 """
-function merge_repeated(index::NamedTuple, ft::FunctionalTable)
-    @unpack len = ft
-    columns = map(v -> RepeatedValue(v, len), index)
-    merge(FunctionalTable(TrustLength(len), columns, TrustOrdering()), ft)
+struct RepeatRow{T <: NamedTuple}
+    row::T
 end
 
-merge_repeated(index::NamedTuple, table) = merge_repeated(index, FunctionalTable(table))
+function FunctionalTable(len::Int, repeat_row::RepeatRow,
+                         ordering::OrderingRule = TrustOrdering())
+    FunctionalTable(TrustLength(len), map(v -> RepeatValue(v, len), repeat_row.row),
+                    ordering)
+end
+
+Base.merge(row::RepeatRow, ft::FunctionalTable; kwargs...) =
+    merge(FunctionalTable(ft.len, row), ft; kwargs...)
+
+Base.merge(ft::FunctionalTable, row::RepeatRow; kwargs...) =
+    merge(ft, FunctionalTable(ft.len, row); kwargs...)
 
 """
 $(SIGNATURES)
 
 Prepend the `index` as repeated columns to `f(index, tables...)`.
 """
-fuse(f, index::NamedTuple, tables...) = merge_repeated(index, f(index, tables...))
+fuse(f, index::NamedTuple, tables...) =
+    merge(RepeatRow(index), FunctionalTable(f(index, tables...)))
 
 """
 $(TYPEDEF)
