@@ -150,9 +150,11 @@ end
     @test eltype(ft) ≡ typeof((a = first(A), b = first(B), c = first(C)))
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
-    @test keys(columns(ft)) == (:a, :b, :c)
-    @test select(ft, (:a, :b)) ≅ FunctionalTable((a = A, b = B)) ≅ select(ft, :a, :b)
-    @test select(ft; drop = (:a, :b)) ≅ FunctionalTable((c = C,))
+    @test keys(ft) == (:a, :b, :c)
+    @test values(ft) ≡ values(ft.columns)
+    @test ft[(:a, :b)] ≅ FunctionalTable((a = A, b = B))
+    @test ft[drop = (:a, :b)] ≅ FunctionalTable((c = C,))
+    @test ft[:a] == A
     @test FunctionalTable(ft) ≅ ft
     cols = map(collect, columns(ft))
     @test all(isa.(values(cols), AbstractVector))

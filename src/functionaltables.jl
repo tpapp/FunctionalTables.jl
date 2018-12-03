@@ -1,4 +1,4 @@
-export FunctionalTable, columns, ordering, select, rename
+export FunctionalTable, columns, ordering, rename
 
 struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
     len::Int
@@ -14,6 +14,10 @@ struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
         new{C, typeof(ordering)}(len, columns, ordering)
     end
 end
+
+####
+#### accessor API
+####
 
 """
 $(SIGNATURES)
@@ -36,6 +40,16 @@ Return the ordering of the table, which is a tuple of `ColumnOrdering` objects.
 """
 ordering(ft::FunctionalTable) = ft.ordering
 
+Base.keys(ft::FunctionalTable) = keys(ft.columns)
+
+Base.pairs(ft::FunctionalTable) = pairs(ft.columns)
+
+Base.values(ft::FunctionalTable) = values(ft.columns)
+
+####
+#### Outer constructors from FunctionalTable or NamedTuple
+####
+
 function FunctionalTable(ft::FunctionalTable,
                          ordering_rule::OrderingRule{K} = VerifyOrdering()) where K
     @unpack ordering = ordering_rule
@@ -55,6 +69,10 @@ function FunctionalTable(columns::NamedTuple, ::TryOrdering)
     error("not implemented yet, maybe open an issue?")
 end
 
+####
+#### Iteration interface and constructor
+####
+
 Base.IteratorSize(::FunctionalTable) = Base.HasLength()
 
 Base.length(ft::FunctionalTable) = ft.len
@@ -62,7 +80,7 @@ Base.length(ft::FunctionalTable) = ft.len
 Base.IteratorEltype(::FunctionalTable) = Base.HasEltype()
 
 Base.eltype(ft::FunctionalTable) =
-    NamedTuple{keys(ft.columns), Tuple{map(eltype, values(ft.columns))...}}
+    NamedTuple{keys(ft), Tuple{map(eltype, values(ft))...}}
 
 """
 $(SIGNATURES)
@@ -116,23 +134,30 @@ end
 
 """
 $(SIGNATURES)
-select(ft, keep...)
-select(ft; drop)
 
-Select a subset of columns from the table.
+With a tuple of symbols returns `FunctionalTable` with a subset of the columns.
 
-`select(ft, keep)` and `select(ft, keep...)` returns the table with the given columns.
+With a single symbol, return that column (an iterable).
 
-`select(ft; drop = keys)` is a convenience form for keeping **all but** the given columns.
+`[drop = spec]` will keep *all but* the given columns, where `spec` is a `Tuple` of
+`Symbol`s.
+
+# Example
+
+```julia
+ft[(:a, :b)]
+ft[:a]
+ft[drop = (:a, :b)]
+ ```
 """
-function select(ft::FunctionalTable, keep::Keys)
+function Base.getindex(ft::FunctionalTable, keep::Keys)
     FunctionalTable(NamedTuple{keep}(ft.columns),
                     TrustOrdering(select_ordering(ft.ordering, keep)))
 end
 
-select(ft::FunctionalTable, keep::Symbol...) = select(ft, keep)
+Base.getindex(ft::FunctionalTable, key::Symbol) = ft.columns[key]
 
-select(ft::FunctionalTable; drop::Keys) = select(ft, dropkeys(keys(ft.columns), drop))
+Base.getindex(ft::FunctionalTable; drop::Keys) = getindex(ft, dropkeys(keys(ft), drop))
 
 """
 $(SIGNATURES)
@@ -174,7 +199,7 @@ rename(key -> Symbol(String(key) * "-mean"), ft) # add "-mean" to each name
 ```
 """
 rename(f, ft::FunctionalTable) =
-    rename(ft, Dict(k => f(k) for k in keys(columns(ft))); strict = false)
+    rename(ft, Dict(k => f(k) for k in keys(ft)); strict = false)
 
 """
 $(SIGNATURES)
@@ -200,11 +225,11 @@ error is thrown if column names overlap.
 function Base.merge(a::FunctionalTable, b::FunctionalTable; replace = false)
     @argcheck length(a) == length(b)
     if !replace
-        dup = tuple((keys(a.columns) ∩ keys(b.columns))...)
+        dup = tuple((keys(a) ∩ keys(b))...)
         @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
     end
     FunctionalTable(merge(a.columns, b.columns),
-                    TrustOrdering(merge_ordering(a.ordering, keys(b.columns))))
+                    TrustOrdering(merge_ordering(a.ordering, keys(b))))
 end
 
 """
