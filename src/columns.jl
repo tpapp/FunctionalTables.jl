@@ -1,6 +1,4 @@
-export
-    SinkConfig, SINKCONFIG, SINKVECTORS, collect_column, collect_columns,
-    RLEVector, contiguous_blocks
+export SinkConfig, SINKVECTORS
 
 
 # sinks — general interface
@@ -178,8 +176,21 @@ function Base.iterate(rle::RLEVector{C,T,S},
     end
 end
 
-
-# # Collecting named tuples
+####
+#### Collecting named tuples
+####
+
+"""
+$(TYPEDEF)
+
+Wrapper type to indicate that the length should not be checked.
+
+!!! note
+    The perfect footgun. Only use when the lengths are known and verified by construction.
+"""
+struct TrustLength
+    len::Int
+end
 
 """
 $(SIGNATURES)
@@ -205,11 +216,18 @@ function collect_column!(sink, cfg::SinkConfig, itr, state)
 end
 
 """
-columns, ordering_rule = $(SIGNATURES)
+len, columns, ordering_rule = $(SIGNATURES)
 
 Collect results from `itr`, which are supposed to be `NamedTuple`s with the same names, into
-sinks (using config `cfg`), then finalize and return the `NamedTuple` of the columns and the
-ordering rule (which is always a `TrustOrdering`, since that was implicit or verified).
+sinks (using config `cfg`), then finalize and return
+
+1. the length,
+
+2. the `NamedTuple` of the columns, and
+
+3. the ordering rule (which is always `::TrustOrdering`, by construction).
+
+The results can be
 """
 function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R}) where R
     elts, state = @ifsomething iterate(itr)
@@ -219,32 +237,33 @@ function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R}) w
         # we need to narrow ordering so that comparisons make sense
         ordering_rule = OrderingRule{R}(select_ordering(ordering_rule.ordering, keys(elts)))
     end
-    collect_columns!(sinks, cfg, itr, ordering_rule,
+    collect_columns!(sinks, 1, cfg, itr, ordering_rule,
                      # :trust, we don't need the last element for comparison, hence the ()
                      R ≡ :trust ? () : elts, state)
 end
 
-function collect_columns!(sinks::NamedTuple, cfg, itr, ordering_rule::OrderingRule{R},
-                          lastelts, state) where R
+function collect_columns!(sinks::NamedTuple, len::Int, cfg, itr,
+                          ordering_rule::OrderingRule{R}, lastelts, state) where R
     @unpack ordering = ordering_rule
     while true
         y = iterate(itr, state)
-        y ≡ nothing && return finalize_sinks(cfg, sinks), TrustOrdering(ordering_rule)
+        y ≡ nothing && return TrustLength(len), finalize_sinks(cfg, sinks), TrustOrdering(ordering_rule)
         elts, state = y
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
+        len += 1
         if R ≢ :trust
             if cmp_ordering(ordering, lastelts, elts) > 0
                 if R ≡ :verify
                     error("Sorting $(sorting) violated: $(lastelts) ≰ $(elts).")
                 else # R ≡ :try
                     new_ordering = retained_ordering(ordering, lastelts, elts)
-                    return collect_columns!(newsinks, cfg, itr,
+                    return collect_columns!(newsinks, len, cfg, itr,
                                             OrderingRule{R}(new_ordering), elts, state)
                 end
             end
             lastelts = elts
         end
-        sinks ≡ newsinks || return collect_columns!(newsinks, cfg, itr, ordering_rule,
+        sinks ≡ newsinks || return collect_columns!(newsinks, len, cfg, itr, ordering_rule,
                                                     lastelts, state)
     end
 end

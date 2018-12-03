@@ -4,7 +4,9 @@ using FunctionalTables:
     cancontain, narrow, append1, split_namedtuple, is_ordered_subset, is_prefix,
     # column ordering building blocks
     ColumnOrdering, merge_ordering, table_ordering, cmp_ordering, retained_ordering,
-    ordering_repr
+    ordering_repr,
+    # column collection building blocks
+    SINKCONFIG, collect_column, collect_columns, RLEVector, TrustLength
 import Tables
 
 include("utilities.jl")         # utilities for tests
@@ -55,7 +57,8 @@ end
 @testset "collect by names" begin
     itr = [(a = i, b = Float64(i), c = 'a' + i - 1) for i in 1:10]
     ordering = table_ordering((:a, :b, :c))
-    result, rule = collect_columns(SinkConfig(;useRLE = false), itr, TrustOrdering(ordering))
+    len, result, rule = collect_columns(SinkConfig(;useRLE = false), itr, TrustOrdering(ordering))
+    @test len ≡ TrustLength(10)
     @test result isa NamedTuple{(:a, :b, :c), Tuple{Vector{Int8}, Vector{Float64}, Vector{Char}}}
     @test result.a ≅ 1:10
     @test result.b ≅ Float64.(1:10)
@@ -85,7 +88,8 @@ end
 
 @testset "large collection" begin
     v = randvector(1000)
-    columns, ordering = collect_columns(SINKCONFIG, [(a = a, ) for a in v], TrustOrdering())
+    len, columns, ordering = collect_columns(SINKCONFIG, [(a = a, ) for a in v], TrustOrdering())
+    @test len ≡ TrustLength(length(v))
     @test collect(columns.a) ≅ v
     @test ordering ≡ TrustOrdering()
 end
@@ -270,6 +274,12 @@ end
     f(_, ft) = map(sum, columns(ft))
     @test map(Ref ∘ f, by(ft, :a)) ≅
         FunctionalTable((a = [1, 2], b = [6, 9]), TrustOrdering(:a, ))
+end
+
+@testset "map by empty subtables" begin
+    ft = FunctionalTable((a = [1, 1, 1, 2, 2], ), VerifyOrdering(:a))
+    @test map((_, ft) -> Ref((len = length(ft), )), by(ft, (:a, ))) ≅
+        FunctionalTable((a = [1, 2], len = [3, 2]), TrustOrdering(:a))
 end
 
 @testset "corner cases for collecting and ordering" begin

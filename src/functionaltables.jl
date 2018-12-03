@@ -4,15 +4,47 @@ struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
     len::Int
     columns::C
     ordering::O
-    function FunctionalTable(columns::C, ordering_rule::R
+    function FunctionalTable(trust_length::TrustLength, columns::C, ordering_rule::R
                              ) where {C <: NamedTuple, R <: TrustOrdering}
         @unpack ordering = ordering_rule
-        @argcheck !isempty(columns) "At least one column is needed."
-        len = length(first(columns))
-        @argcheck all(column -> length(column) == len, Base.tail(values(columns)))
         checkvalidkeys(orderkey.(ordering), keys(columns))
-        new{C, typeof(ordering)}(len, columns, ordering)
+        new{C, typeof(ordering)}(trust_length.len, columns, ordering)
     end
+end
+
+####
+#### Outer constructors from FunctionalTable or NamedTuple
+####
+
+function FunctionalTable(ft::FunctionalTable,
+                         ordering_rule::OrderingRule{K} = VerifyOrdering()) where K
+    @unpack ordering = ordering_rule
+    K ≡ :trust && return FunctionalTable(TrustLength(ft.len), ft.columns, ordering_rule)
+    rule = is_prefix(ordering, ft.ordering) ? TrustOrdering(ordering) : ordering_rule
+    FunctionalTable(TrustLength(ft.len), ft.columns, rule)
+end
+
+function FunctionalTable(len::TrustLength, columns::NamedTuple,
+                         ordering_rule::VerifyOrdering = VerifyOrdering(()))
+    ft = FunctionalTable(len, columns, TrustOrdering(ordering_rule))
+    @argcheck issorted(ft; lt = (a, b) -> isless_ordering(ft.ordering, a, b))
+    ft
+end
+
+function FunctionalTable(len::TrustLength, columns::NamedTuple, ::TryOrdering)
+    error("not implemented yet, maybe open an issue?")
+end
+
+function FunctionalTable(len::Integer, columns::NamedTuple, ordering_rule::OrderingRule)
+    @argcheck all(column -> length(column) == len, values(columns))
+    FunctionalTable(TrustLength(len), columns, ordering_rule)
+end
+
+function FunctionalTable(columns::NamedTuple, ordering_rule::OrderingRule)
+    @argcheck !isempty(columns) "At least one column is needed to determine length."
+    len = length(first(columns))
+    @argcheck all(column -> length(column) == len, Base.tail(values(columns)))
+    FunctionalTable(TrustLength(len), columns, ordering_rule)
 end
 
 ####
@@ -45,29 +77,6 @@ Base.keys(ft::FunctionalTable) = keys(ft.columns)
 Base.pairs(ft::FunctionalTable) = pairs(ft.columns)
 
 Base.values(ft::FunctionalTable) = values(ft.columns)
-
-####
-#### Outer constructors from FunctionalTable or NamedTuple
-####
-
-function FunctionalTable(ft::FunctionalTable,
-                         ordering_rule::OrderingRule{K} = VerifyOrdering()) where K
-    @unpack ordering = ordering_rule
-    K ≡ :trust && return FunctionalTable(ft.columns, ordering_rule)
-    rule = is_prefix(ordering, ft.ordering) ? TrustOrdering(ordering) : ordering_rule
-    FunctionalTable(ft.columns, rule)
-end
-
-function FunctionalTable(columns::NamedTuple,
-                         ordering_rule::VerifyOrdering = VerifyOrdering(()))
-    ft = FunctionalTable(columns, TrustOrdering(ordering_rule))
-    @argcheck issorted(ft; lt = (a, b) -> isless_ordering(ft.ordering, a, b))
-    ft
-end
-
-function FunctionalTable(columns::NamedTuple, ::TryOrdering)
-    error("not implemented yet, maybe open an issue?")
-end
 
 ####
 #### Iteration interface and constructor
@@ -151,7 +160,7 @@ ft[drop = (:a, :b)]
  ```
 """
 function Base.getindex(ft::FunctionalTable, keep::Keys)
-    FunctionalTable(NamedTuple{keep}(ft.columns),
+    FunctionalTable(TrustLength(ft.len), NamedTuple{keep}(ft.columns),
                     TrustOrdering(select_ordering(ft.ordering, keep)))
 end
 
@@ -176,12 +185,12 @@ rename(ft, (a = :a2, b = :μ))   # same, using NamedTuple
 ```
 """
 function rename(ft::FunctionalTable, changes::AbstractDict{Symbol, Symbol}; strict = true)
-    @unpack columns, ordering = ft
+    @unpack len, columns, ordering = ft
     strict && @argcheck keys(changes) ⊆ keys(columns)
     change(key) = changes[key]
     newkeys = map(change, keys(columns))
     newordering = map(o -> ColumnOrdering{change(orderkey(o)), orderrev(o)}(), ordering)
-    FunctionalTable(NamedTuple{newkeys}(values(columns)), TrustOrdering(newordering))
+    FunctionalTable(TrustLength(len), NamedTuple{newkeys}(values(columns)), TrustOrdering(newordering))
 end
 
 rename(ft::FunctionalTable, @nospecialize changes; strict = true) =
@@ -228,7 +237,7 @@ function Base.merge(a::FunctionalTable, b::FunctionalTable; replace = false)
         dup = tuple((keys(a) ∩ keys(b))...)
         @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
     end
-    FunctionalTable(merge(a.columns, b.columns),
+    FunctionalTable(TrustLength(a.len), merge(a.columns, b.columns),
                     TrustOrdering(merge_ordering(a.ordering, keys(b))))
 end
 
@@ -258,5 +267,9 @@ A `FunctionalTable` of the first `n` rows.
 
 Useful for previews and data exploration.
 """
-Base.first(ft::FunctionalTable, n::Integer) =
-    FunctionalTable(Iterators.take(ft, n), TrustOrdering(ft.ordering))
+function Base.first(ft::FunctionalTable, n::Integer; cfg::SinkConfig = SINKVECTORS)
+    @unpack len, columns, ordering = ft
+    FunctionalTable(TrustLength(min(len, n)),
+                    map(col -> collect_column(cfg, Iterators.take(col, n)), columns),
+                    TrustOrdering(ordering))
+end

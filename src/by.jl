@@ -34,8 +34,9 @@ Make a functional table from `index`, repeating each value for a column to match
 of `ft`, then merge the two.
 """
 function merge_repeated(index::NamedTuple, ft::FunctionalTable)
-    len = length(ft)
-    merge(FunctionalTable(map(v -> RepeatedValue(v, len), index)), ft)
+    @unpack len = ft
+    columns = map(v -> RepeatedValue(v, len), index)
+    merge(FunctionalTable(TrustLength(len), columns, TrustOrdering()), ft)
 end
 
 merge_repeated(index::NamedTuple, table) = merge_repeated(index, FunctionalTable(table))
@@ -79,17 +80,20 @@ function Base.iterate(g::SplitTable{K}) where K
     row, itrstate = @ifsomething iterate(ft)
     firstkey, elts = split_namedtuple(NamedTuple{K}, row)
     sinks = make_sinks(cfg, elts)
-    _collect_block!(sinks, g, firstkey, itrstate)
+    _collect_block!(sinks, 1, g, firstkey, itrstate)
 end
 
 function Base.iterate(g::SplitTable, state)
     sinks, firstkey, itrstate = @ifsomething state
-    _collect_block!(sinks, g, firstkey, itrstate)
+    _collect_block!(sinks, 1, g, firstkey, itrstate)
 end
 
-function _collect_block!(sinks::NamedTuple, g::SplitTable{K}, firstkey, state) where {K}
+function _collect_block!(sinks::NamedTuple, len::Int, g::SplitTable{K}, firstkey, state) where {K}
     @unpack ft, cfg = g
-    _grouped() = (firstkey, FunctionalTable(finalize_sinks(cfg, sinks)))
+    _grouped() = (firstkey, FunctionalTable(TrustLength(len), finalize_sinks(cfg, sinks),
+                                            # FIXME residual ordering from split table
+                                            # should be propagated
+                                            TrustOrdering()))
     while true
         y = iterate(ft, state)
         y ≡ nothing && return _grouped(), nothing
@@ -97,7 +101,8 @@ function _collect_block!(sinks::NamedTuple, g::SplitTable{K}, firstkey, state) w
         key, elts = split_namedtuple(NamedTuple{K}, row)
         key == firstkey || return _grouped(), (make_sinks(cfg, elts), key, state)
         newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
-        sinks ≡ newsinks || return _collect_block!(newsinks, g, firstkey, state)
+        len += 1
+        sinks ≡ newsinks || return _collect_block!(newsinks, len, g, firstkey, state)
     end
 end
 
