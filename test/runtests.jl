@@ -16,7 +16,10 @@ include("utilities.jl")         # utilities for tests
 ####
 
 @testset "narrow" begin
-    @test narrow(1) ≡ true
+    @test narrow(true) ≡ true
+    @test narrow(false) ≡ false
+    @test narrow(1) ≡ Int8(1)
+    @test narrow(0) ≡ Int8(0)
     @test narrow(-9) ≡ Int8(-9)
     @test narrow(128) ≡ Int16(128)
     @test narrow(2^17) ≡ Int32(2^17)

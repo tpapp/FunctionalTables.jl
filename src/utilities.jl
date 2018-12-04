@@ -99,11 +99,11 @@ Convert the argument to a narrower type if possible without losing precision.
 """
 @inline narrow(x) = x
 
+@inline narrow(x::Bool) = x
+
 @inline function narrow(x::Integer)
     intype(T) = typemin(T) ≤ x ≤ typemax(T)
-    if intype(Bool)
-        Bool(x)
-    elseif intype(Int8)
+    if intype(Int8)
         Int8(x)
     elseif intype(Int16)
         Int16(x)
