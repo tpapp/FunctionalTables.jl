@@ -126,8 +126,19 @@ An iterator that groups rows of tables by the columns `splitkeys`, returning
 `(index::NamedTupe, table::FunctionalTable)` for each contiguous block of the index keys.
 
 `cfg` is used for collecting `table`.
+
+The function has a convenience form `by(ft, splitkeys...; ...)`.
 """
-by(ft::FunctionalTable, splitkeys::Keys; cfg = SINKVECTORS) = SplitTable{splitkeys}(ft, cfg)
+function by(ft::FunctionalTable, splitkeys::Keys; cfg = SINKVECTORS)
+    @unpack ordering = ft
+    # TODO by could be very clever here by only sorting the subgroup which is unsorted,
+    # and giving views of the underlying vectors instead of creating new tables
+    if is_prefix(splitkeys, orderkey.(ordering))
+        SplitTable{splitkeys}(ft, cfg)
+    else
+        SplitTable{splitkeys}(sort(ft, split_compatible_ordering(ordering, splitkeys)), cfg)
+    end
+end
 
 by(ft::FunctionalTable, splitkeys::Symbol...; kwargs...) = by(ft, splitkeys; kwargs...)
 

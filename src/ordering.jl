@@ -107,6 +107,26 @@ function _select_table_ordering(keep, column_ordering, rest...)
     orderkey(column_ordering) ∈ keep ? (column_ordering, ordering_rest...) : ordering_rest
 end
 
+"""
+$(SIGNATURES)
+
+Extend `ordering` so that it can be used to split a table with `splitkeys`.
+"""
+function split_compatible_ordering(ordering::TableOrdering, splitkeys::Keys)
+    @argcheck allunique(splitkeys)
+    o_first, o_rest = first(ordering), Base.tail(ordering)
+    s_first = first(splitkeys)
+    if orderkey(o_first) ≡ s_first
+        (o_first, split_compatible_ordering(o_rest, Base.tail(splitkeys))...)
+    else
+        o_matched = findfirst(o -> orderkey(o) ≡ s_first, o_rest)
+        (o_matched ≡ nothing ? ColumnOrdering{s_first, false}() : o_rest[o_matched],
+         split_compatible_ordering(ordering, Base.tail(splitkeys))...)
+    end
+end
+
+split_compatible_ordering(ordering::TableOrdering, splitkeys::Tuple{}) = ()
+
 ####
 #### Comparisons
 ####
