@@ -233,6 +233,8 @@ Merge two `FunctionalTable`s.
 
 When `replace == true`, columns in the first one are replaced by second one, otherwise an
 error is thrown if column names overlap.
+
+The second table can be specified as a `NamedTuple` of columns.
 """
 function Base.merge(a::FunctionalTable, b::FunctionalTable; replace = false)
     @argcheck length(a) == length(b)
@@ -259,6 +261,9 @@ Map `ft` using `f` by rows, then `merge` the two. See [`map(f, ::FunctionalTable
 function Base.merge(f, ft::FunctionalTable; cfg = SINKCONFIG, replace = false)
     merge(ft, map(f, ft; cfg = cfg); replace = replace)
 end
+
+Base.merge(ft::FunctionalTable, newcolumns::NamedTuple; replace = false) =
+    merge(ft, FunctionalTable(newcolumns); replace = replace)
 
 Base.filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
     FunctionalTable(Iterators.filter(f, ft), TrustOrdering(ft.ordering))

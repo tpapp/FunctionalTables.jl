@@ -204,6 +204,8 @@ end
     @test_throws ArgumentError merge(ft, FunctionalTable((c = C, a = A2)))
     @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
         FunctionalTable((a = A2, b = B, c = C))
+    @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
+        merge(ft, (c = C, a = A2); replace = true)
 end
 
 @testset "map (direct)" begin
