@@ -127,6 +127,11 @@ end
 
 split_compatible_ordering(ordering::TableOrdering, splitkeys::Tuple{}) = ()
 
+split_compatible_ordering(ordering::Tuple{}, splitkeys::Tuple{}) = ()
+
+split_compatible_ordering(ordering::Tuple{}, splitkeys::Keys) = table_ordering(splitkeys)
+
+
 ####
 #### Comparisons
 ####

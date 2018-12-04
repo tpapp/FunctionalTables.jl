@@ -148,6 +148,8 @@ end
     @test split_compatible_ordering(ordering, (:b, :a)) ≡ ordering[[2, 1]]
     @test split_compatible_ordering(ordering, (:b, :a, :d)) ≡
         table_ordering((ordering[[2, 1]]..., :d))
+    @test split_compatible_ordering((), (:b, :a, :d)) ≡ table_ordering((:b, :a, :d))
+    @test split_compatible_ordering((), ()) ≡ ()
 end
 
 ####
