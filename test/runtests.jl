@@ -4,7 +4,7 @@ using FunctionalTables:
     cancontain, narrow, append1, split_namedtuple, is_ordered_subset, is_prefix,
     # column ordering building blocks
     ColumnOrdering, merge_ordering, table_ordering, cmp_ordering, retained_ordering,
-    ordering_repr,
+    ordering_repr, split_compatible_ordering,
     # column collection building blocks
     SINKCONFIG, collect_column, collect_columns, RLEVector, TrustLength
 import Tables
@@ -141,6 +141,17 @@ end
     @test is_ordered_subset((), ())
 end
 
+@testset "split compatible ordering" begin
+    ordering = table_ordering((:a, :b => reverse, :c))
+    @test split_compatible_ordering(ordering, (:a, )) ≡ ordering[1:1]
+    @test split_compatible_ordering(ordering, (:a, :b)) ≡ ordering[1:2]
+    @test split_compatible_ordering(ordering, (:b, :a)) ≡ ordering[[2, 1]]
+    @test split_compatible_ordering(ordering, (:b, :a, :d)) ≡
+        table_ordering((ordering[[2, 1]]..., :d))
+    @test split_compatible_ordering((), (:b, :a, :d)) ≡ table_ordering((:b, :a, :d))
+    @test split_compatible_ordering((), ()) ≡ ()
+end
+
 ####
 #### FunctionalTable API
 ####
@@ -274,6 +285,7 @@ end
                                  b = [1, 2, 2, 2, 2],
                                  c = [3, 5, 1, 4, 2]),
                                 VerifyOrdering(:b, :a => reverse))
+    @test sort(sft, (:b, )).columns ≡ sft.columns # prefix ordering
 end
 
 @testset "map by" begin
@@ -281,7 +293,7 @@ end
     b = 1:5
     ft = FunctionalTable((a = a, b = b), VerifyOrdering(:a, :b))
     f(_, ft) = map(sum, columns(ft))
-    @test map(Ref ∘ f, by(ft, :a)) ≅
+    @test map(Ref ∘ f, by(ft, (:a, ))) ≅
         FunctionalTable((a = [1, 2], b = [6, 9]), TrustOrdering(:a, ))
 end
 
