@@ -94,7 +94,7 @@ $(SIGNATURES)
 
 Convert the argument to a narrower type if possible without losing precision.
 
-!!! note
+!!! NOTE
     This function is not type stable, use only when new container types are determined.
 """
 @inline narrow(x) = x

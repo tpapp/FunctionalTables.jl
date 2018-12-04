@@ -65,9 +65,9 @@ $(SIGNATURES)
 
 Create and return a sink using configuration `cfg` that stores `elt`.
 """
-function make_sink(cfg::SinkConfig, elt)
+function make_sink(cfg::SinkConfig{M}, elt) where M
     if cfg.useRLE
-        RLEVector{typeof(cfg.missingvalue)}(Int8, elt)
+        RLEVector{M}(Int8, elt)
     else
         [narrow(elt)]
     end
@@ -98,8 +98,32 @@ more elements.
 """
 finalize_sink(::SinkConfig, sink::Vector) = sink
 
-
-# # RLE compressed vector
+####
+#### RepeatValue type
+####
+
+"""
+RepeatValue(value, len)
+
+Equivalent to a vector containing `len` instances of `value`. Used *internally*.
+"""
+struct RepeatValue{T} <: AbstractVector{T}
+    value::T
+    len::Int
+end
+
+Base.size(s::RepeatValue) = (s.len, )
+
+Base.IndexStyle(::Type{<:RepeatValue}) = Base.IndexLinear()
+
+function Base.getindex(s::RepeatValue, i::Integer)
+    @boundscheck checkbounds(s, i)
+    s.value
+end
+
+####
+#### RLE compressed vector
+####
 
 """
 $(TYPEDEF)
@@ -109,25 +133,33 @@ An RLE encoded vector, using negative lengths for missing values.
 When an elemenet in `counts` is positive, it encodes that many of the corresponding element
 in `data`.
 
-Negative `counts` encode missing values of type `S` (has to be a concrete singleton). In
-this case there is no corresponding value in `data`, ie `data` may have *fewer elements*
-than `counts`.
+Negative `counts` encode values of type `S` (has to be a concrete singleton). In this case
+there is no corresponding value in `data`, ie `data` may have *fewer elements* than
+`counts`. Note that `0` values in count are reserved, and currently should not happen.
 
-An RLEVector can also act as a column.
+The flag `anyS::Bool` is `true` iff there are *any* values of type `S` in object.
+
+An RLEVector is iterable.
 """
-struct RLEVector{C,T,S}
+struct RLEVector{C,T,S,anyS}
     counts::Vector{C}
     data::Vector{T}
-    function RLEVector{S}(counts::Vector{C}, data::Vector{T}) where {C <: Signed, T, S}
+    function RLEVector{S,anyS}(counts::Vector{C}, data::Vector{T}
+                               ) where {C <: Signed, T, S, anyS}
         @argcheck isconcretetype(S) && fieldcount(S) == 0 "$(S) is not a concrete singleton type."
+        @argcheck anyS isa Bool
         @argcheck length(counts) ≥ length(data)
-        new{eltype(counts), eltype(data) ,S}(counts, data)
+        new{eltype(counts), eltype(data), S, anyS}(counts, data)
     end
 end
 
-RLEVector{S}(C::Type{<:Signed}, elt) where S = RLEVector{S}(ones(C, 1), [narrow(elt)])
+RLEVector{S}(C::Type{<:Signed}, ::S) where {S} =
+    RLEVector{S, true}(-ones(C, 1), Vector{Union{}}())
 
-function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S}, elt) where {C,T,S}
+RLEVector{S}(C::Type{<:Signed}, elt) where {S} =
+    RLEVector{S, false}(ones(C, 1), [narrow(elt)])
+
+function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S,anyS}, elt) where {C,T,S,anyS}
     @unpack counts, data = sink
     if cancontain(T, elt)       # can accommodate elt, same sink
         if data[end] == elt && 0 < counts[end] < typemax(C)
@@ -138,11 +170,18 @@ function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S}, elt) where {
         end
         sink
     else                        # can't accommodate elt, allocate new sink
-        RLEVector{S}(append1(counts, one(C)), append1(data, narrow(elt)))
+        RLEVector{S,anyS}(append1(counts, one(C)), append1(data, narrow(elt)))
     end
 end
 
-function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S}, elt::S) where {C,T,S}
+function store!_or_reallocate(cfg::SinkConfig, sink::RLEVector{C, T, S, false}, elt::S
+                              ) where {C, T, S}
+    @unpack counts, data = sink
+    # simply flip the flag anyS
+    store!_or_reallocate(cfg, RLEVector{S, true}(counts, data), elt)
+end
+
+function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S,true}, elt::S) where {C,T,S}
     @unpack counts, data = sink
     if 0 > counts[end] > typemin(C) # ongoing RLE run with S
         counts[end] -= one(C)
@@ -154,9 +193,11 @@ end
 
 finalize_sink(::SinkConfig, rle::RLEVector) = rle
 
-Base.eltype(::Type{RLEVector{C,T,S}}) where {C,T,S} = Base.promote_typejoin(T,S)
+function Base.eltype(::Type{RLEVector{C,T,S,anyS}}) where {C,T,S,anyS}
+    anyS ? Base.promote_typejoin(T,S) : T
+end
 
-Base.length(rle::RLEVector{C,T,S}) where {C,T,S} = sum(abs ∘ Int, rle.counts)
+Base.length(rle::RLEVector) = sum(abs ∘ Int, rle.counts)
 
 function Base.iterate(rle::RLEVector{C,T,S},
                  (countsindex, dataindex, remaining) = (0, 0, zero(C))) where {C,T,S}

@@ -4,29 +4,6 @@
 
 export by, RepeatRow
 
-####
-#### RepeatValue type
-####
-
-"""
-RepeatValue(value, len)
-
-Equivalent to a vector containing `len` instances of `value`. Used *internally*.
-"""
-struct RepeatValue{T} <: AbstractVector{T}
-    value::T
-    len::Int
-end
-
-Base.size(s::RepeatValue) = (s.len, )
-
-Base.IndexStyle(::Type{<:RepeatValue}) = Base.IndexLinear()
-
-function Base.getindex(s::RepeatValue, i::Integer)
-    @boundscheck checkbounds(s, i)
-    s.value
-end
-
 """
 RepeatRow(row)
 

@@ -79,6 +79,17 @@ end
     @test collect(s) ≅ v
 end
 
+@testset "RLE corner cases" begin
+    s = collect_column(SINKCONFIG, [missing])
+    @test length(s) == 1
+    @test collect(s)[1] ≡ missing
+    @test eltype(typeof(s)) ≡ Missing
+    s = collect_column(SINKCONFIG, [130])
+    @test length(s) == 1
+    @test eltype(typeof(s)) ≡ Int16
+    @test collect(s) == [130]
+end
+
 @testset "overrun RLE" begin
     v = vcat(fill(1, 300), fill(missing, 5), fill(2, 20), fill(missing, 200))
     s = collect_column(SINKCONFIG, v)
