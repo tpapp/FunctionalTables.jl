@@ -70,7 +70,7 @@ end
     v = vcat(fill(1, 10), fill(missing, 5), fill(2, 20))
     s = collect_column(SINKCONFIG, v)
     @test length(s) == 35
-    @test eltype(s) ≡ Union{Int8, Missing}
+    @test eltype(typeof(s)) ≡ Union{Int8, Missing}
     @test s.data == [1, 2]
     @test s.counts == [10, -5, 20]
     @test collect(s) ≅ v
@@ -80,7 +80,7 @@ end
     v = vcat(fill(1, 300), fill(missing, 5), fill(2, 20), fill(missing, 200))
     s = collect_column(SINKCONFIG, v)
     @test length(s) == length(v)
-    @test eltype(s) ≡ Union{Int8, Missing}
+    @test eltype(typeof(s)) ≡ Union{Int8, Missing}
     @test s.data == [1, 1, 1, 2]
     @test s.counts == [127, 127, 300-(2*127), -5, 20, -128, -200+128]
     @test collect(s) ≅ v

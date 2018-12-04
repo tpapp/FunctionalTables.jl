@@ -154,7 +154,7 @@ end
 
 finalize_sink(::SinkConfig, rle::RLEVector) = rle
 
-Base.eltype(::RLEVector{C,T,S}) where {C,T,S} = Base.promote_typejoin(T,S)
+Base.eltype(::Type{RLEVector{C,T,S}}) where {C,T,S} = Base.promote_typejoin(T,S)
 
 Base.length(rle::RLEVector{C,T,S}) where {C,T,S} = sum(abs ∘ Int, rle.counts)
 
