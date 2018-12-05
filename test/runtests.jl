@@ -3,8 +3,8 @@ using FunctionalTables:
     # utilities
     cancontain, narrow, append1, split_namedtuple, is_ordered_subset, is_prefix,
     # column ordering building blocks
-    ColumnOrdering, merge_ordering, table_ordering, cmp_ordering, retained_ordering,
-    ordering_repr, split_compatible_ordering,
+    ColumnOrdering, merge_ordering, select_ordering, table_ordering, cmp_ordering,
+    retained_ordering, ordering_repr, split_compatible_ordering,
     # column collection building blocks
     SINKCONFIG, collect_column, collect_columns, RLEVector, TrustLength
 import Tables
@@ -131,7 +131,16 @@ end
     @test ordering_repr(table_ordering((:a, :b => reverse))) == "ordering ↑a ↓b"
 end
 
-@testset "merge ordering" begin
+@testset "select_ordering" begin
+    t = table_ordering((:a, :b => reverse, :c))
+    @test select_ordering(t, (:a, )) ≡ t[[1]]
+    @test select_ordering(t, (:b, )) ≡ ()
+    @test select_ordering(t, (:c, )) ≡ ()
+    @test select_ordering(t, (:b, :a, )) ≡ t[[1,2]]
+    @test select_ordering(t, (:c, :a, )) ≡ t[[1]]
+end
+
+@testset "merge_ordering" begin
     o = table_ordering((:a, :b, :c))
     @test merge_ordering(o, (:d, :e)) ≡ o
     @test merge_ordering(o, (:c, :b)) ≡ table_ordering((:a, ))
