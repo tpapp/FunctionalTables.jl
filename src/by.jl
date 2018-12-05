@@ -21,10 +21,10 @@ function FunctionalTable(len::Int, repeat_row::RepeatRow,
 end
 
 Base.merge(row::RepeatRow, ft::FunctionalTable; kwargs...) =
-    merge(FunctionalTable(ft.len, row), ft; kwargs...)
+    merge(FunctionalTable(length(ft), row), ft; kwargs...)
 
 Base.merge(ft::FunctionalTable, row::RepeatRow; kwargs...) =
-    merge(ft, FunctionalTable(ft.len, row); kwargs...)
+    merge(ft, FunctionalTable(length(ft), row); kwargs...)
 
 """
 $(SIGNATURES)
@@ -49,7 +49,7 @@ struct SplitTable{K, T <: FunctionalTable, C <: SinkConfig}
     ft::T
     cfg::C
     function SplitTable{K}(ft::T, cfg::C) where {K, T <: FunctionalTable, C <: SinkConfig}
-        @argcheck is_prefix(K, orderkey.(ft.ordering))
+        @argcheck is_prefix(K, orderkey.(ordering(ft)))
         new{K, T, C}(ft)
     end
 end
@@ -107,14 +107,11 @@ An iterator that groups rows of tables by the columns `splitkeys`, returning
 The function has a convenience form `by(ft, splitkeys...; ...)`.
 """
 function by(ft::FunctionalTable, splitkeys::Keys; cfg = SINKVECTORS)
-    @unpack ordering = ft
     # TODO by could be very clever here by only sorting the subgroup which is unsorted,
     # and giving views of the underlying vectors instead of creating new tables
-    if is_prefix(splitkeys, orderkey.(ordering))
-        SplitTable{splitkeys}(ft, cfg)
-    else
-        SplitTable{splitkeys}(sort(ft, split_compatible_ordering(ordering, splitkeys)), cfg)
-    end
+    sorted_ft = is_prefix(splitkeys, orderkey.(ordering(ft))) ? ft :
+        sort(ft, split_compatible_ordering(ordering(ft), splitkeys))
+    SplitTable{splitkeys}(sorted_ft, cfg)
 end
 
 by(ft::FunctionalTable, splitkeys::Symbol...; kwargs...) = by(ft, splitkeys; kwargs...)

@@ -7,7 +7,7 @@ Tables.rowaccess(::Type{<:FunctionalTable}) = true
 Tables.rows(ft::FunctionalTable) = ft
 
 Tables.schema(ft::FunctionalTable) =
-    Tables.Schema(keys(ft.columns), map(eltype, values(ft.columns)))
+    Tables.Schema(keys(columns(ft)), map(eltype, values(columns(ft))))
 
 Tables.columnaccess(::Type{<:FunctionalTable}) = true
 

@@ -179,8 +179,11 @@ end
     @test eltype(ft) ≡ typeof((a = first(A), b = first(B), c = first(C)))
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
-    @test keys(ft) == (:a, :b, :c)
-    @test values(ft) ≡ values(ft.columns)
+    @test keys(ft) ≡ (:a, :b, :c)
+    @test propertynames(ft) ≡ (:a, :b, :c)
+    @test ft.a ≡ A
+    @test_throws ErrorException ft.nonexistent
+    @test values(ft) ≡ values(columns(ft))
     @test ft[(:a, :b)] ≅ FunctionalTable((a = A, b = B))
     @test ft[drop = (:a, :b)] ≅ FunctionalTable((c = C,))
     @test ft[:a] == A
@@ -301,7 +304,7 @@ end
                                  b = [1, 2, 2, 2, 2],
                                  c = [3, 5, 1, 4, 2]),
                                 VerifyOrdering(:b, :a => reverse))
-    @test sort(sft, (:b, )).columns ≡ sft.columns # prefix ordering
+    @test columns(sort(sft, (:b, ))) ≡ columns(sft) # prefix ordering
 end
 
 @testset "map by" begin
