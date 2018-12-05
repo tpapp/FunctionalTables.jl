@@ -83,6 +83,8 @@ of precision.
 """
 @inline cancontain(T, elt::S) where {S} = S <: T || T ≡ promote_type(S, T)
 
+@inline cancontain(::Type{Union{}}, _) = false
+
 @inline cancontain(T::Type{<:Integer}, elt::Integer) where {S <: Integer} =
     typemin(T) ≤ elt ≤ typemax(T)
 

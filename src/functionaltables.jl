@@ -1,5 +1,17 @@
 export FunctionalTable, columns, ordering, rename
 
+"""
+$(TYPEDEF)
+
+# Internal notes
+
+- Use accessors `length`, `colums`, and `ordering` to access the fields, property accessors
+  are forwarded to `columns`.
+
+- The only inner constructor is the one where both the length and the ordering is trusted
+  (and thus unchecked). Outer constructors should first wrap the ordering rule, then
+  compute/verify length.
+"""
 struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
     len::Int
     columns::C
@@ -18,16 +30,16 @@ end
 
 function FunctionalTable(ft::FunctionalTable,
                          ordering_rule::OrderingRule{K} = VerifyOrdering()) where K
-    @unpack ordering = ordering_rule
-    K ≡ :trust && return FunctionalTable(TrustLength(ft.len), ft.columns, ordering_rule)
-    rule = is_prefix(ordering, ft.ordering) ? TrustOrdering(ordering) : ordering_rule
-    FunctionalTable(TrustLength(ft.len), ft.columns, rule)
+    new_ordering = ordering_rule.ordering
+    K ≡ :trust && return FunctionalTable(TrustLength(length(ft)), columns(ft), ordering_rule)
+    rule = is_prefix(new_ordering, ordering(ft)) ? TrustOrdering(new_ordering) : ordering_rule
+    FunctionalTable(TrustLength(length(ft)), columns(ft), rule)
 end
 
 function FunctionalTable(len::TrustLength, columns::NamedTuple,
                          ordering_rule::VerifyOrdering = VerifyOrdering(()))
     ft = FunctionalTable(len, columns, TrustOrdering(ordering_rule))
-    @argcheck issorted(ft; lt = (a, b) -> isless_ordering(ft.ordering, a, b))
+    @argcheck issorted(ft; lt = (a, b) -> isless_ordering(ordering(ft), a, b))
     ft
 end
 
@@ -51,7 +63,7 @@ FunctionalTable(len::Integer) =
     FunctionalTable(TrustLength(len), NamedTuple(), TrustOrdering())
 
 ####
-#### accessor API
+#### accessors for fields and property overloading
 ####
 
 """
@@ -66,20 +78,24 @@ Each column is an iterable, but not necessarily an `<: AbstractVector`.
     assumed by the implementation. Use `map(collect, columns(ft))` or similar to obtain
     mutable vectors.
 """
-columns(ft::FunctionalTable) = ft.columns
+columns(ft::FunctionalTable) = getfield(ft, :columns)
 
 """
 $(SIGNATURES)
 
 Return the ordering of the table, which is a tuple of `ColumnOrdering` objects.
 """
-ordering(ft::FunctionalTable) = ft.ordering
+ordering(ft::FunctionalTable) = getfield(ft, :ordering)
 
-Base.keys(ft::FunctionalTable) = keys(ft.columns)
+Base.propertynames(ft::FunctionalTable) = propertynames(columns(ft))
 
-Base.pairs(ft::FunctionalTable) = pairs(ft.columns)
+Base.getproperty(ft::FunctionalTable, key::Symbol) = getproperty(columns(ft), key)
 
-Base.values(ft::FunctionalTable) = values(ft.columns)
+Base.keys(ft::FunctionalTable) = keys(columns(ft))
+
+Base.pairs(ft::FunctionalTable) = pairs(columns(ft))
+
+Base.values(ft::FunctionalTable) = values(columns(ft))
 
 ####
 #### Iteration interface and constructor
@@ -87,7 +103,7 @@ Base.values(ft::FunctionalTable) = values(ft.columns)
 
 Base.IteratorSize(::FunctionalTable) = Base.HasLength()
 
-Base.length(ft::FunctionalTable) = ft.len
+Base.length(ft::FunctionalTable) = getfield(ft, :len)
 
 Base.IteratorEltype(::FunctionalTable) = Base.HasEltype()
 
@@ -113,7 +129,7 @@ function FunctionalTable(itr, ordering_rule::OrderingRule = TrustOrdering();
 end
 
 function Base.iterate(ft::FunctionalTable, states...)
-    ys = map(iterate, ft.columns, states...)
+    ys = map(iterate, columns(ft), states...)
     any(isequal(nothing), ys) && return nothing
     map(first, ys), map(last, ys)
 end
@@ -134,10 +150,9 @@ function _showcolcontents(io::IO, itr)
 end
 
 function Base.show(io::IO, ft::FunctionalTable)
-    @unpack len, columns, ordering = ft
-    print(io, "FunctionalTable of $(len) rows, ", ordering_repr(ordering))
+    print(io, "FunctionalTable of $(length(ft)) rows, ", ordering_repr(ordering(ft)))
     ioc = IOContext(io, :compact => true)
-    for (key, col) in pairs(ft.columns)
+    for (key, col) in pairs(columns(ft))
         println(ioc)
         print(ioc, "    ", key, " = ")
         _showcolcontents(ioc, col)
@@ -163,11 +178,11 @@ ft[drop = (:a, :b)]
  ```
 """
 function Base.getindex(ft::FunctionalTable, keep::Keys)
-    FunctionalTable(TrustLength(ft.len), NamedTuple{keep}(ft.columns),
-                    TrustOrdering(select_ordering(ft.ordering, keep)))
+    FunctionalTable(TrustLength(length(ft)), NamedTuple{keep}(columns(ft)),
+                    TrustOrdering(select_ordering(ordering(ft), keep)))
 end
 
-Base.getindex(ft::FunctionalTable, key::Symbol) = ft.columns[key]
+Base.getindex(ft::FunctionalTable, key::Symbol) = columns(ft)[key]
 
 Base.getindex(ft::FunctionalTable; drop::Keys) = getindex(ft, dropkeys(keys(ft), drop))
 
@@ -188,12 +203,11 @@ rename(ft, (a = :a2, b = :μ))   # same, using NamedTuple
 ```
 """
 function rename(ft::FunctionalTable, changes::AbstractDict{Symbol, Symbol}; strict = true)
-    @unpack len, columns, ordering = ft
-    strict && @argcheck keys(changes) ⊆ keys(columns)
+    strict && @argcheck keys(changes) ⊆ keys(columns(ft))
     change(key) = changes[key]
-    newkeys = map(change, keys(columns))
-    newordering = map(o -> ColumnOrdering{change(orderkey(o)), orderrev(o)}(), ordering)
-    FunctionalTable(TrustLength(len), NamedTuple{newkeys}(values(columns)), TrustOrdering(newordering))
+    newkeys = map(change, keys(columns(ft)))
+    newordering = map(o -> ColumnOrdering{change(orderkey(o)), orderrev(o)}(), ordering(ft))
+    FunctionalTable(TrustLength(length(ft)), NamedTuple{newkeys}(values(columns(ft))), TrustOrdering(newordering))
 end
 
 rename(ft::FunctionalTable, @nospecialize changes; strict = true) =
@@ -242,8 +256,8 @@ function Base.merge(a::FunctionalTable, b::FunctionalTable; replace = false)
         dup = tuple((keys(a) ∩ keys(b))...)
         @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
     end
-    FunctionalTable(TrustLength(a.len), merge(a.columns, b.columns),
-                    TrustOrdering(merge_ordering(a.ordering, keys(b))))
+    FunctionalTable(TrustLength(length(a)), merge(columns(a), columns(b)),
+                    TrustOrdering(merge_ordering(ordering(a), keys(b))))
 end
 
 """
@@ -266,7 +280,7 @@ Base.merge(ft::FunctionalTable, newcolumns::NamedTuple; replace = false) =
     merge(ft, FunctionalTable(newcolumns); replace = replace)
 
 Base.filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
-    FunctionalTable(Iterators.filter(f, ft), TrustOrdering(ft.ordering))
+    FunctionalTable(Iterators.filter(f, ft), TrustOrdering(ordering(ft)))
 
 """
 $(SIGNATURES)
@@ -276,8 +290,7 @@ A `FunctionalTable` of the first `n` rows.
 Useful for previews and data exploration.
 """
 function Base.first(ft::FunctionalTable, n::Integer; cfg::SinkConfig = SINKVECTORS)
-    @unpack len, columns, ordering = ft
-    FunctionalTable(TrustLength(min(len, n)),
-                    map(col -> collect_column(cfg, Iterators.take(col, n)), columns),
-                    TrustOrdering(ordering))
+    FunctionalTable(TrustLength(min(length(ft), n)),
+                    map(col -> collect_column(cfg, Iterators.take(col, n)), columns(ft)),
+                    TrustOrdering(ordering(ft)))
 end
