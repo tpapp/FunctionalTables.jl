@@ -85,6 +85,8 @@ of precision.
 
 @inline cancontain(::Type{Union{}}, _) = false
 
+@inline cancontain(::Type{Union{}}, ::Integer) = false
+
 @inline cancontain(T::Type{<:Integer}, elt::Integer) where {S <: Integer} =
     typemin(T) ≤ elt ≤ typemax(T)
 
