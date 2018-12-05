@@ -103,8 +103,11 @@ select_ordering(ordering::TableOrdering, keep::Keys) =
 _select_table_ordering(keep) = ()
 
 function _select_table_ordering(keep, column_ordering, rest...)
-    ordering_rest = _select_table_ordering(keep, rest...)
-    orderkey(column_ordering) ∈ keep ? (column_ordering, ordering_rest...) : ordering_rest
+    if orderkey(column_ordering) ∈ keep
+        (column_ordering, _select_table_ordering(keep, rest...)...)
+    else                        # skipping a ColumnOrdering invalidates the rest
+        ()
+    end
 end
 
 """
