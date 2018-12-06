@@ -189,56 +189,24 @@ Base.getindex(ft::FunctionalTable; drop::Keys) = getindex(ft, dropkeys(keys(ft),
 """
 $(SIGNATURES)
 
-Rename the columns of a `FunctionalTable`. `changes`, which is an `AbstractDict` or anything
-that supports `pairs` and can be collected into one, maps column names to new names.
-
-When `strict` (the default), the keys of the dictionary are checked to be a subset of
-existing keys, otherwise superfluous keys are ignored.
+Rename the columns of a `FunctionalTable`. The second argument should be a `NamedTuple` of
+`src = dest` pairs, where `dest` is a symbol.
 
 # Example
 
 ```julia
-rename(ft, Dict(:a => :a2, :b => :μ))
-rename(ft, (a = :a2, b = :μ))   # same, using NamedTuple
+rename(ft, (α = :a, β = :b)) # rename `α` to `a` and `β` to `b`
 ```
 """
-function rename(ft::FunctionalTable, changes::AbstractDict{Symbol, Symbol}; strict = true)
-    strict && @argcheck keys(changes) ⊆ keys(columns(ft))
-    change(key) = changes[key]
-    newkeys = map(change, keys(columns(ft)))
+function rename(ft::FunctionalTable, changes::NamedTuple{srckeys, <: Keys}) where srckeys
+    destkeys = values(changes)
+    @argcheck allunique(destkeys) "Non-unique destination keys."
+    @argcheck srckeys ⊆ keys(columns(ft)) "Source keys not in table."
+    change(key) = (key ∈ srckeys ? changes[key] : key)
     newordering = map(o -> ColumnOrdering{change(orderkey(o)), orderrev(o)}(), ordering(ft))
-    FunctionalTable(TrustLength(length(ft)), NamedTuple{newkeys}(values(columns(ft))), TrustOrdering(newordering))
+    FunctionalTable(TrustLength(length(ft)), NamedTuple{destkeys}(values(columns(ft))),
+                    TrustOrdering(newordering))
 end
-
-rename(ft::FunctionalTable, @nospecialize changes; strict = true) =
-    rename(ft, Dict(pairs(changes)); strict = strict)
-
-"""
-$(SIGNATURES)
-
-Rename the columns of a `FunctionalTable` using a function that maps symbols to symbols.
-
-# Example
-
-```julia
-rename(key -> Symbol(String(key) * "-mean"), ft) # add "-mean" to each name
-```
-"""
-rename(f, ft::FunctionalTable) =
-    rename(ft, Dict(k => f(k) for k in keys(ft)); strict = false)
-
-"""
-$(SIGNATURES)
-
-Convenience wrapper for `rename(::FunctionalTable, ::AbstractDict)` which constructs the
-change dictionary from pairs. Non-existent keys always error.
-
-```julia
-rename(ft, :a => :a2, :b => :μ)
-```
-"""
-rename(ft::FunctionalTable, pairs::Pair{Symbol, Symbol}...) =
-    rename(ft, Dict(pairs); strict = true)
 
 """
 $(SIGNATURES)
