@@ -271,7 +271,9 @@ sinks (using config `cfg`), then finalize and return
 The results can be
 """
 function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R}) where R
-    elts, state = @ifsomething iterate(itr)
+    y = iterate(itr)
+    y ≡ nothing && return 0, NamedTuple(), TrustOrdering() # empty iterable
+    elts, state = y
     @argcheck elts isa NamedTuple
     sinks = make_sinks(cfg, elts)
     if R ≡ :try
