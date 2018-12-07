@@ -383,8 +383,10 @@ end
 
 @testset "rename" begin
     ft = FunctionalTable((a = 1:3, b = 4:6), VerifyOrdering(:b, :a => reverse))
-    ft2 = FunctionalTable((aa = 1:3, bb = 4:6), VerifyOrdering(:bb, :aa => reverse))
-    @test rename(ft, (a = :aa, b = :bb)) ≅ ft2
+    @test rename(ft, (a = :aa, b = :bb)) ≅
+        FunctionalTable((aa = 1:3, bb = 4:6), VerifyOrdering(:bb, :aa => reverse))
+    @test rename(ft, (a = :aa, )) ≅
+        FunctionalTable((aa = 1:3, b = 4:6), VerifyOrdering(:b, :aa => reverse))
 
     # extras - error
     @test_throws ArgumentError rename(ft, (a = :aa, b = :bb, c = :cc))

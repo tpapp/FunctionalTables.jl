@@ -203,8 +203,10 @@ function rename(ft::FunctionalTable, changes::NamedTuple{srckeys, <: Keys}) wher
     @argcheck allunique(destkeys) "Non-unique destination keys."
     @argcheck srckeys ⊆ keys(columns(ft)) "Source keys not in table."
     change(key) = (key ∈ srckeys ? changes[key] : key)
+    newkeys = map(change, keys(columns(ft)))
     newordering = map(o -> ColumnOrdering{change(orderkey(o)), orderrev(o)}(), ordering(ft))
-    FunctionalTable(TrustLength(length(ft)), NamedTuple{destkeys}(values(columns(ft))),
+    FunctionalTable(TrustLength(length(ft)),
+                    NamedTuple{newkeys}(values(columns(ft))),
                     TrustOrdering(newordering))
 end
 
