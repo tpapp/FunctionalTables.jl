@@ -325,6 +325,12 @@ end
         FunctionalTable((a = [1, 2], b = [6, 9]), TrustOrdering(:a, ))
 end
 
+@testset "map by with filtering" begin
+    ft = FunctionalTable((a = 1:5, b = 1:5), VerifyOrdering(:a))
+    @test map((_, ft) -> isodd(first(ft.b)) ? ft : (), by(ft, :a)) ≅
+        FunctionalTable((a = [1, 3, 5], b = [1, 3, 5]), TrustOrdering(:a))
+end
+
 @testset "map by empty subtables" begin
     ft = FunctionalTable((a = [1, 1, 1, 2, 2], ), VerifyOrdering(:a))
     @test map((_, ft) -> Ref((len = length(ft), )), by(ft, (:a, ))) ≅
@@ -352,6 +358,9 @@ end
     # nothing in the rows, also special constructor
     emptyrows = (NamedTuple() for _ in 1:1000)
     @test FunctionalTable(emptyrows) ≅ FunctionalTable(1000)
+
+    # no rows
+    @test FunctionalTable(()) ≅ FunctionalTable(0, NamedTuple(), TrustOrdering())
 end
 
 @testset "printing" begin
