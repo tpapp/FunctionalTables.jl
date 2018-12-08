@@ -278,7 +278,7 @@ function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R}) w
     sinks = make_sinks(cfg, elts)
     if R ≡ :try
         # we need to narrow ordering so that comparisons make sense
-        ordering_rule = OrderingRule{R}(select_ordering(ordering_rule.ordering, keys(elts)))
+        ordering_rule = OrderingRule{R}(mask_ordering(ordering_rule.ordering, keys(elts)))
     end
     collect_columns!(sinks, 1, cfg, itr, ordering_rule,
                      # :trust, we don't need the last element for comparison, hence the ()

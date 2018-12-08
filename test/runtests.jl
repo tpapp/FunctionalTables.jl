@@ -1,10 +1,10 @@
 using FunctionalTables, Test
 using FunctionalTables:
     # utilities
-    cancontain, narrow, append1, split_namedtuple, is_ordered_subset, is_prefix,
+    cancontain, narrow, append1, split_namedtuple, is_prefix,
     # column ordering building blocks
-    ColumnOrdering, merge_ordering, select_ordering, table_ordering, cmp_ordering,
-    retained_ordering, ordering_repr, split_compatible_ordering,
+    ColumnOrdering, mask_ordering, table_ordering, cmp_ordering, retained_ordering,
+    ordering_repr, split_compatible_ordering,
     # column collection building blocks
     SINKCONFIG, collect_column, collect_columns, RLEVector, TrustLength
 import Tables
@@ -133,20 +133,18 @@ end
     @test ordering_repr(table_ordering((:a, :b => reverse))) == "ordering ↑a ↓b"
 end
 
-@testset "select_ordering" begin
+@testset "mask_ordering" begin
     t = table_ordering((:a, :b => reverse, :c))
-    @test select_ordering(t, (:a, )) ≡ t[[1]]
-    @test select_ordering(t, (:b, )) ≡ ()
-    @test select_ordering(t, (:c, )) ≡ ()
-    @test select_ordering(t, (:b, :a, )) ≡ t[[1,2]]
-    @test select_ordering(t, (:c, :a, )) ≡ t[[1]]
-end
+    @test mask_ordering(t, (:a, )) ≡ t[[1]]
+    @test mask_ordering(t, (:b, )) ≡ ()
+    @test mask_ordering(t, (:c, )) ≡ ()
+    @test mask_ordering(t, (:b, :a, )) ≡ t[[1,2]]
+    @test mask_ordering(t, (:c, :a, )) ≡ t[[1]]
 
-@testset "merge_ordering" begin
     o = table_ordering((:a, :b, :c))
-    @test merge_ordering(o, (:d, :e)) ≡ o
-    @test merge_ordering(o, (:c, :b)) ≡ table_ordering((:a, ))
-    @test merge_ordering(o, (:a, :b, :c)) ≡ table_ordering(())
+    @test mask_ordering(o, (:d, :e), true) ≡ o
+    @test mask_ordering(o, (:c, :b), true) ≡ table_ordering((:a, ))
+    @test mask_ordering(o, (:a, :b, :c), true) ≡ table_ordering(())
 end
 
 @testset "retained ordering" begin
@@ -156,14 +154,6 @@ end
     @test retained_ordering(o, row, (a = 2, b = 1, c = -1)) ≡ o
     @test retained_ordering(o, row, (a = 2, b = 3, c = -1)) ≡ table_ordering((:a, ))
     @test @inferred(retained_ordering(table_ordering(()), row, row)) ≡ table_ordering(())
-end
-
-@testset "ordered subsets" begin
-    @test is_ordered_subset((:a, :b), (:a, :b, :c))
-    @test is_ordered_subset((:a, :c), (:a, :b, :c))
-    @test !is_ordered_subset((:c, :a), (:a, :b, :c))
-    @test !is_ordered_subset((:d, :a), (:a, :b, :c))
-    @test is_ordered_subset((), ())
 end
 
 @testset "split compatible ordering" begin

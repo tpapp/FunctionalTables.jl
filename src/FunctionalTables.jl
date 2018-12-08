@@ -6,6 +6,7 @@ using Parameters: @unpack
 using IterTools: @ifsomething, imap
 import Tables
 
+include("keys.jl")
 include("utilities.jl")
 include("ordering.jl")
 include("columns.jl")

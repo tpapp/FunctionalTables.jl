@@ -19,7 +19,7 @@ struct FunctionalTable{C <: NamedTuple, O <: TableOrdering}
     function FunctionalTable(trust_length::TrustLength, columns::C, ordering_rule::R
                              ) where {C <: NamedTuple, R <: TrustOrdering}
         @unpack ordering = ordering_rule
-        checkvalidkeys(orderkey.(ordering), keys(columns))
+        @argcheck key_issubset(orderkey.(ordering), keys(columns))
         new{C, typeof(ordering)}(trust_length.len, columns, ordering)
     end
 end
@@ -178,13 +178,19 @@ ft[drop = (:a, :b)]
  ```
 """
 function Base.getindex(ft::FunctionalTable, keep::Keys)
+    @argcheck key_issubset(keep, keys(ft)) "Not all keys in $(keep) are in $(keys(ft))."
     FunctionalTable(TrustLength(length(ft)), NamedTuple{keep}(columns(ft)),
-                    TrustOrdering(select_ordering(ordering(ft), keep)))
+                    TrustOrdering(mask_ordering(ordering(ft), keep)))
 end
 
 Base.getindex(ft::FunctionalTable, key::Symbol) = columns(ft)[key]
 
-Base.getindex(ft::FunctionalTable; drop::Keys) = getindex(ft, dropkeys(keys(ft), drop))
+function Base.getindex(ft::FunctionalTable; drop::Keys)
+    @argcheck key_issubset(drop, keys(ft)) "Not all keys in $(drop) are in $(keys(ft))."
+    keep = key_setdiff(keys(ft), drop)
+    FunctionalTable(TrustLength(length(ft)), NamedTuple{keep}(columns(ft)),
+                    TrustOrdering(mask_ordering(ordering(ft), drop, true)))
+end
 
 """
 $(SIGNATURES)
@@ -227,7 +233,7 @@ function Base.merge(a::FunctionalTable, b::FunctionalTable; replace = false)
         @argcheck isempty(dup) "Duplicate columns $(dup). Use `replace = true`."
     end
     FunctionalTable(TrustLength(length(a)), merge(columns(a), columns(b)),
-                    TrustOrdering(merge_ordering(ordering(a), keys(b))))
+                    TrustOrdering(mask_ordering(ordering(a), keys(b), true)))
 end
 
 """
