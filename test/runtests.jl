@@ -314,6 +314,10 @@ end
                                  c = [3, 5, 1, 4, 2]),
                                 VerifyOrdering(:b, :a => reverse))
     @test columns(sort(sft, (:b, ))) ≡ columns(sft) # prefix ordering
+
+    let ordering = (:c => reverse, ) # test convenience syntax
+        @test sort(ft, ordering) ≅ sort(ft, ordering...)
+    end
 end
 
 @testset "map by" begin
