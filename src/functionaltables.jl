@@ -78,7 +78,7 @@ Each column is an iterable, but not necessarily an `<: AbstractVector`.
     assumed by the implementation. Use `map(collect, columns(ft))` or similar to obtain
     mutable vectors.
 """
-columns(ft::FunctionalTable) = getfield(ft, :columns)
+@inline columns(ft::FunctionalTable) = getfield(ft, :columns)
 
 """
 $(SIGNATURES)
@@ -87,15 +87,15 @@ Return the ordering of the table, which is a tuple of `ColumnOrdering` objects.
 """
 ordering(ft::FunctionalTable) = getfield(ft, :ordering)
 
-Base.propertynames(ft::FunctionalTable) = propertynames(columns(ft))
+@inline Base.propertynames(ft::FunctionalTable) = propertynames(columns(ft))
 
-Base.getproperty(ft::FunctionalTable, key::Symbol) = getproperty(columns(ft), key)
+@inline Base.getproperty(ft::FunctionalTable, key::Symbol) = getproperty(columns(ft), key)
 
-Base.keys(ft::FunctionalTable) = keys(columns(ft))
+@inline Base.keys(ft::FunctionalTable) = keys(columns(ft))
 
-Base.pairs(ft::FunctionalTable) = pairs(columns(ft))
+@inline Base.pairs(ft::FunctionalTable) = pairs(columns(ft))
 
-Base.values(ft::FunctionalTable) = values(columns(ft))
+@inline Base.values(ft::FunctionalTable) = values(columns(ft))
 
 ####
 #### Iteration interface and constructor
@@ -103,11 +103,11 @@ Base.values(ft::FunctionalTable) = values(columns(ft))
 
 Base.IteratorSize(::FunctionalTable) = Base.HasLength()
 
-Base.length(ft::FunctionalTable) = getfield(ft, :len)
+@inline Base.length(ft::FunctionalTable) = getfield(ft, :len)
 
 Base.IteratorEltype(::FunctionalTable) = Base.HasEltype()
 
-Base.eltype(ft::FunctionalTable) =
+@inline Base.eltype(ft::FunctionalTable) =
     NamedTuple{keys(ft), Tuple{map(eltype, values(ft))...}}
 
 """

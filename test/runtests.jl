@@ -52,8 +52,10 @@ end
 
 @testset "splitting named tuples" begin
     s = NamedTuple{(:a, :c)}
-    @test split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4)) ≡ ((a = 1, c = 3), (b = 2, d = 4))
-    @test split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4)) ≡ ((a = 3, c = 1), (b = 2, d = 4))
+    @test @inferred(split_namedtuple(s, (a = 1, b = 2, c = 3, d = 4))) ≡
+        ((a = 1, c = 3), (b = 2, d = 4))
+    @test @inferred(split_namedtuple(s ,(c = 1, b = 2, a = 3, d = 4))) ≡
+        ((a = 3, c = 1), (b = 2, d = 4))
     @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
 end
 
@@ -188,21 +190,23 @@ end
     @test eltype(ft) ≡ typeof((a = first(A), b = first(B), c = first(C)))
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
-    @test keys(ft) ≡ (:a, :b, :c)
-    @test propertynames(ft) ≡ (:a, :b, :c)
-    @test ft.a ≡ A
+    @test @inferred(keys(ft)) ≡ (:a, :b, :c)
+    @test @inferred(propertynames(ft)) ≡ (:a, :b, :c)
+    @test @inferred(columns(ft)) ≡ getfield(ft, :columns)
+    column_a(ft) = ft.a         # wrap for inference to kick in
+    @test @inferred(column_a(ft)) ≡ A
     @test_throws ErrorException ft.nonexistent
-    @test values(ft) ≡ values(columns(ft))
+    @test @inferred(values(ft)) ≡ values(columns(ft))
     @test ft[(:a, :b)] ≅ FunctionalTable((a = A, b = B))
     @test ft[drop = (:a, :b)] ≅ FunctionalTable((c = C,))
     @test ft[:a] == A
     @test FunctionalTable(ft) ≅ ft
-    cols = map(collect, columns(ft))
+    cols = @inferred map(collect, columns(ft))
     @test all(isa.(values(cols), AbstractVector))
     @test cols.a == A && cols.a ≢ A
     @test cols.b == B && cols.b ≢ B
     @test cols.c == C && cols.c ≢ C
-    @test FunctionalTable(ft) ≡ ft # same object
+    @test @inferred(FunctionalTable(ft)) ≡ ft # same object
 end
 
 @testset "merging" begin
@@ -211,7 +215,7 @@ end
     C = Float64.(21:30)
     A2 = .-A
     ft = FunctionalTable((a = A, b = B), VerifyOrdering(:a, :b))
-    @test merge(ft, FunctionalTable((c = C, ))) ≅
+    @test @inferred(merge(ft, FunctionalTable((c = C, )))) ≅
         FunctionalTable((a = A, b = B, c = C), VerifyOrdering(:a, :b))
     @test_throws ArgumentError merge(ft, FunctionalTable((c = C, a = A2)))
     @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
