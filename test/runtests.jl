@@ -208,16 +208,16 @@ end
     @test @inferred(merge(ft, FunctionalTable((c = C, )))) ≅
         FunctionalTable((a = A, b = B, c = C), VerifyOrdering(:a, :b))
     @test_throws ArgumentError merge(ft, FunctionalTable((c = C, a = A2)))
-    @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
+    @test @inferred(merge(ft, FunctionalTable((c = C, a = A2)); replace = true)) ≅
         FunctionalTable((a = A2, b = B, c = C))
-    @test merge(ft, FunctionalTable((c = C, a = A2)); replace = true) ≅
+    @test @inferred(merge(ft, FunctionalTable((c = C, a = A2)); replace = true)) ≅
         merge(ft, (c = C, a = A2); replace = true)
 end
 
 @testset "map (direct)" begin
     A = 1:10
     B = 'a':('a'+9)
-    ft = FunctionalTable((a = A, b = B), VerifyOrdering(:a, :b))
+    ft = @inferred FunctionalTable((a = A, b = B), VerifyOrdering(:a, :b))
     f(row) = (b = row.a + 1, c = row.b + 2)
     B2 = A .+ 1
     C = collect(B .+ 2)
@@ -243,10 +243,10 @@ end
 @testset "RepeatRow" begin
     rr = RepeatRow((a = 1, b = 2))
     ft = FunctionalTable((a = fill(1, 3), b = fill(2, 3)))
-    @test FunctionalTable(3, rr) ≅ ft
+    @test @inferred(FunctionalTable(3, rr)) ≅ ft
     ft2 = FunctionalTable((c = 4:6, d = 7:9))
-    @test merge(rr, ft2) ≅ merge(ft, ft2)
-    @test merge(ft2, rr) ≅ merge(ft2, ft)
+    @test @inferred(merge(rr, ft2)) ≅ @inferred(merge(ft, ft2))
+    @test @inferred(merge(ft2, rr)) ≅ @inferred(merge(ft2, ft))
 end
 
 @testset "split by 1" begin
