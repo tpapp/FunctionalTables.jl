@@ -59,7 +59,7 @@ Base.IteratorSize(::Type{<:SplitTable}) = Base.SizeUnknown()
 # FIXME type may be known to a certain extent, <: FunctionalTable?
 Base.IteratorEltype(::Type{<:SplitTable}) = Base.EltypeUnknown()
 
-ordering(st::SplitTable{K}) where K = select_ordering(ordering(st.ft), K)
+ordering(st::SplitTable{K}) where K = mask_ordering(ordering(st.ft), K)
 
 function Base.iterate(g::SplitTable{K}) where K
     @unpack ft, cfg = g

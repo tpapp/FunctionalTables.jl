@@ -82,32 +82,24 @@ table_ordering(column_ordering_specifications) =
 """
 $(SIGNATURES)
 
-Calculate ordering when a table with `ordering` is merged with a table containing
-`otherkeys`, which may replace columns.
+When `invert == false`, keep the initial part of ordering that has keys in `keys`. Not
+having a key in `keys` invalidates the tail ordering from that point. This is useful for
+selecting subsets of orderings.
+
+When `invert == true`, *having a key* in `keys` invalidates the ordering. This is useful for
+orderings of merged and dropped columns.
 """
-function merge_ordering(ordering::TableOrdering, otherkeys::Keys)
-    firstinvalid = findfirst(o -> orderkey(o) ∈ otherkeys, ordering)
-    firstinvalid ≡ nothing ? ordering : ordering[1:(firstinvalid-1)]
-end
-
-"""
-$(SIGNATURES)
-
-Calculate table ordering when only `keep` keys are kept.
-
-`keep` may contain keys not in the ordering, ie those of a `FunctionalTable`.
-"""
-select_ordering(ordering::TableOrdering, keep::Keys) =
-    _select_table_ordering(keep, ordering...)
-
-_select_table_ordering(keep) = ()
-
-function _select_table_ordering(keep, column_ordering, rest...)
-    if orderkey(column_ordering) ∈ keep
-        (column_ordering, _select_table_ordering(keep, rest...)...)
-    else                        # skipping a ColumnOrdering invalidates the rest
-        ()
+Base.@pure function mask_ordering(ordering::TableOrdering, keys::Keys, invert::Bool = false)
+    kept = ColumnOrdering[]
+    for o in ordering
+        if key_in(orderkey(o), keys) ⊻ invert
+            push!(kept, o)
+        else
+            # skipping a ColumnOrdering invalidates the rest
+            break
+        end
     end
+    (kept..., )
 end
 
 """

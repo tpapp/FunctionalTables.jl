@@ -3,75 +3,6 @@
 #####
 
 ####
-#### Manipulating keys (tuples of Symbol)
-####
-
-"""
-Type for keys, used internally.
-"""
-const Keys = Tuple{Vararg{Symbol}}
-
-"""
-$(SIGNATURES)
-
-Check that `argkeys` are a subset of the valid keys.
-
-When that does not hold, throw and error with an informative message.
-"""
-function checkvalidkeys(argkeys::Keys, validkeys::Keys)
-    for key in argkeys
-        @argcheck key ∈ validkeys "Invalid key $(key) ∉ $(validkeys)."
-    end
-    nothing
-end
-
-"""
-$(SIGNATURES)
-
-Check that `drop ⊆ ftkeys`, then return `ftkeys ∖ drop`.
-"""
-function dropkeys(ftkeys::Keys, drop::Keys)
-    checkvalidkeys(drop, ftkeys)
-    tuple(setdiff(ftkeys, drop)...)
-end
-
-# FIXME: is keys_following and is_ordered_subset used anywhere?
-# If not, remove.
-
-"""
-$(SIGNATURES)
-
-If `rest` contains `key`, return the tail starting with `key`, otherwise `()`.
-"""
-keys_following(key::Symbol, rest::Keys) = _keys_following(key, rest...)
-
-_keys_following(key) = ()
-
-_keys_following(key, rest...) =
-    key ≡ first(rest) ? rest : _keys_following(key, Base.tail(rest)...)
-
-"""
-$(SIGNATURES)
-
-Test if `a ⊆ b` and the elements of `a` have the same order in `b`.
-"""
-is_ordered_subset(a::Keys, b::Keys) = _is_ordered_subset(b, a...)
-
-_is_ordered_subset(b) = true
-
-function _is_ordered_subset(b, a_first, a_rest...)
-    following = keys_following(a_first, b)
-    isempty(following) ? false : _is_ordered_subset(Base.tail(following), a_rest...)
-end
-
-"""
-$(SIGNATURES)
-
-Test if `b` starts with `a`.
-"""
-is_prefix(a, b) = length(a) ≤ length(b) && all(a == b for (a,b) in zip(a, b))
-
-####
 #### Container element type management
 ####
 
@@ -154,3 +85,11 @@ julia> split_namedtuple(NamedTuple{(:a, :c)}, (c = 1, b = 2, a = 3, d = 4))
 """
 @inline split_namedtuple(splitter::Type{<:NamedTuple}, nt::NamedTuple) =
     splitter(nt), Base.structdiff(nt, splitter)
+
+
+"""
+$(SIGNATURES)
+
+Test if `b` starts with `a`.
+"""
+is_prefix(a, b) = length(a) ≤ length(b) && all(a == b for (a,b) in zip(a, b))
