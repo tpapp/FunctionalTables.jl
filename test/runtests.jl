@@ -254,7 +254,10 @@ end
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i)
                                                   for i in 1:c], vcat, keycounts),
                          TrustOrdering(:sym, :val))
-    g = by(ft, (:sym, ))
+    g = by(ft, (:sym, ))        # FIXME eventually this should be @inferred
+    @test eltype(typeof(g)) ≡ Tuple{NamedTuple{(:sym, ), Tuple{Symbol}},
+                                    FunctionalTable{NamedTuple{(:val, ), Tuple{Vector{Int8}}},
+                                                    Tuple{}}} # ordering, NOTE will change to :val
     cg = collect(g)
     for (i, (s, c)) in enumerate(keycounts)
         @test cg[i] ≅ ((sym = s, ), FunctionalTable((val = 1:c, )))
