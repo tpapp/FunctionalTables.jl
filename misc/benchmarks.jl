@@ -13,5 +13,7 @@ ft = sort(FunctionalTable((a = a, b = b, c = c)), (:a, :b))
 
 @time map((_, ft) -> ft, by(ft, (:a, :b)));
 # f77a599: 0.215s
+# pretty much unchanged after optimization
 
-@code_warntype iterate(by(ft, (:a, :b)))
+f(ft) = iterate(by(ft, (:a, :b)))
+@code_warntype f(ft)

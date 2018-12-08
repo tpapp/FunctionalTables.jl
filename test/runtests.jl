@@ -258,7 +258,7 @@ end
     @test eltype(typeof(g)) ≡ Tuple{NamedTuple{(:sym, ), Tuple{Symbol}},
                                     FunctionalTable{NamedTuple{(:val, ), Tuple{Vector{Int8}}},
                                                     Tuple{}}} # ordering, NOTE will change to :val
-    cg = collect(g)
+    cg = @inferred collect(g)
     for (i, (s, c)) in enumerate(keycounts)
         @test cg[i] ≅ ((sym = s, ), FunctionalTable((val = 1:c, )))
     end
