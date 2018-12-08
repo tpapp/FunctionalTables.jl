@@ -177,7 +177,7 @@ end
     C = Float64.(21:30)
     ft = FunctionalTable((a = A, b = B, c = C))
     @test Base.IteratorEltype(ft) ≡ Base.HasEltype()
-    @test eltype(ft) ≡ typeof((a = first(A), b = first(B), c = first(C)))
+    @test eltype(typeof(ft)) ≡ typeof((a = first(A), b = first(B), c = first(C)))
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
     @test @inferred(keys(ft)) ≡ (:a, :b, :c)
