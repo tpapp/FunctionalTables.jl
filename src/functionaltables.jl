@@ -107,8 +107,8 @@ Base.IteratorSize(::FunctionalTable) = Base.HasLength()
 
 Base.IteratorEltype(::FunctionalTable) = Base.HasEltype()
 
-@inline Base.eltype(ft::FunctionalTable) =
-    NamedTuple{keys(ft), Tuple{map(eltype, values(ft))...}}
+@inline Base.eltype(::Type{<: FunctionalTable{C}}) where C =
+    NamedTuple{fieldnames(C), Tuple{map(eltype, fieldtypes(C))...}}
 
 """
 $(SIGNATURES)

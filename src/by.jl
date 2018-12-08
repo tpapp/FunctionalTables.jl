@@ -37,58 +37,79 @@ fuse(f, index::NamedTuple, tables...) =
 """
 $(TYPEDEF)
 
-Implements [`by`](@ref).
+Implements [`by`](@ref) using an iterator.
 
-Iterator state is a tuple, with
+# Internals
 
-1. `sinks` and `firstkey`, created from the element with a non-matching key,
+Each rows from the underlying `FunctionalTable` is split into `index` and `rest`.
 
-2. `itrstate`, the iteration state for `itr`.
+Iterator state is
+
+1. `nothing` when the rows of the underlying FunctionalTable have been exhausted,
+
+2. `index`, `rest`, `itrstate` for the next block, where `index` and `rest` are the first
+(mismatching) row that has *not* been pushed to the buffers.
 """
-struct SplitTable{K, T <: FunctionalTable, C <: SinkConfig}
+struct SplitTable{K <: NamedTuple, B <: NamedTuple, O <: TableOrdering, T <: FunctionalTable}
+    block_buffers::B
+    block_ordering::O
     ft::T
-    cfg::C
-    function SplitTable{K}(ft::T, cfg::C) where {K, T <: FunctionalTable, C <: SinkConfig}
-        @argcheck is_prefix(K, orderkey.(ordering(ft)))
-        new{K, T, C}(ft)
+    function SplitTable{K}(block_buffers::B, block_ordering::O, ft::T) where {K, B, O, T}
+        new{K, B, O, T}(block_buffers, block_ordering, ft)
     end
+end
+
+"""
+$(SIGNATURES)
+
+Helper function to set up a `SplitTable`. *Internal*.
+"""
+function split_table(ft::FunctionalTable{C}, splitkeys::Keys) where {C}
+    @argcheck is_prefix(splitkeys, orderkey.(ordering(ft)))
+    block_ordering = ()     # FIXME calculate this
+    T = NamedTuple{fieldnames(C)}(map(eltype, fieldtypes(C)))
+    index, rest = split_namedtuple(NamedTuple{splitkeys}, T)
+    block_buffers = map(V -> Vector{V}(), rest)
+    K = NamedTuple{keys(index), Tuple{values(index)...}}
+    SplitTable{K}(block_buffers, block_ordering, ft)
 end
 
 Base.IteratorSize(::Type{<:SplitTable}) = Base.SizeUnknown()
 
-# FIXME type may be known to a certain extent, <: FunctionalTable?
-Base.IteratorEltype(::Type{<:SplitTable}) = Base.EltypeUnknown()
+Base.IteratorEltype(::Type{<:SplitTable}) = Base.HasEltype()
 
-ordering(st::SplitTable{K}) where K = mask_ordering(ordering(st.ft), K)
+Base.eltype(::Type{<: SplitTable{K,B,O}}) where {K,B,O} = Tuple{K, FunctionalTable{B,O}}
+
+ordering(st::SplitTable{K}) where K = mask_ordering(ordering(st.ft), fieldnames(K))
 
 function Base.iterate(g::SplitTable{K}) where K
-    @unpack ft, cfg = g
-    row, itrstate = @ifsomething iterate(ft)
-    firstkey, elts = split_namedtuple(NamedTuple{K}, row)
-    sinks = make_sinks(cfg, elts)
-    _collect_block!(sinks, 1, g, firstkey, itrstate)
+    row, itrstate = @ifsomething iterate(g.ft)
+    index, rest = split_namedtuple(K, row)
+    iterate(g, (index, rest, itrstate))
 end
 
-function Base.iterate(g::SplitTable, state)
-    sinks, firstkey, itrstate = @ifsomething state
-    _collect_block!(sinks, 1, g, firstkey, itrstate)
-end
-
-function _collect_block!(sinks::NamedTuple, len::Int, g::SplitTable{K}, firstkey, state) where {K}
-    @unpack ft, cfg = g
-    _grouped() = (firstkey, FunctionalTable(TrustLength(len), finalize_sinks(cfg, sinks),
-                                            # FIXME residual ordering from split table
-                                            # should be propagated
-                                            TrustOrdering()))
+function Base.iterate(g::SplitTable{K}, state) where K
+    @unpack ft, block_buffers, block_ordering = g
+    map(b -> resize!(b, 0), block_buffers) # FIXME use foreach?
+    index, rest, itrstate = @ifsomething state
+    len = 0
+    _block() = (index, FunctionalTable(TrustLength(len),
+                                       # FIXME not entirely sure we need to copy
+                                       # if that is emphasized in the semantics
+                                       map(copy, block_buffers),
+                                       TrustOrdering(block_ordering)))
     while true
-        y = iterate(ft, state)
-        y ≡ nothing && return _grouped(), nothing
-        row, state = y
-        key, elts = split_namedtuple(NamedTuple{K}, row)
-        key == firstkey || return _grouped(), (make_sinks(cfg, elts), key, state)
-        newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
+        map(push!, block_buffers, rest) # FIXME use foreach?
         len += 1
-        sinks ≡ newsinks || return _collect_block!(newsinks, len, g, firstkey, state)
+        y = iterate(ft, itrstate)
+        y ≡ nothing && return _block(), nothing # done
+        row, itrstate = y
+        row_index, row_rest = split_namedtuple(K, row)
+        if index == row_index
+             rest = row_rest
+        else
+           return _block(), (row_index, row_rest, itrstate)
+        end
     end
 end
 
@@ -102,16 +123,14 @@ $(SIGNATURES)
 An iterator that groups rows of tables by the columns `splitkeys`, returning
 `(index::NamedTupe, table::FunctionalTable)` for each contiguous block of the index keys.
 
-`cfg` is used for collecting `table`.
-
 The function has a convenience form `by(ft, splitkeys...; ...)`.
 """
-function by(ft::FunctionalTable, splitkeys::Keys; cfg = SINKVECTORS)
+function by(ft::FunctionalTable, splitkeys::Keys)
     # TODO by could be very clever here by only sorting the subgroup which is unsorted,
     # and giving views of the underlying vectors instead of creating new tables
     sorted_ft = is_prefix(splitkeys, orderkey.(ordering(ft))) ? ft :
         sort(ft, split_compatible_ordering(ordering(ft), splitkeys))
-    SplitTable{splitkeys}(sorted_ft, cfg)
+    split_table(sorted_ft, splitkeys)
 end
 
 by(ft::FunctionalTable, splitkeys::Symbol...; kwargs...) = by(ft, splitkeys; kwargs...)

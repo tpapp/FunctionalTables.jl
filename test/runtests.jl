@@ -177,7 +177,7 @@ end
     C = Float64.(21:30)
     ft = FunctionalTable((a = A, b = B, c = C))
     @test Base.IteratorEltype(ft) ≡ Base.HasEltype()
-    @test eltype(ft) ≡ typeof((a = first(A), b = first(B), c = first(C)))
+    @test eltype(typeof(ft)) ≡ typeof((a = first(A), b = first(B), c = first(C)))
     @test Base.IteratorSize(ft) ≡ Base.HasLength()
     @test length(ft) ≡ length(A)
     @test @inferred(keys(ft)) ≡ (:a, :b, :c)
@@ -254,8 +254,11 @@ end
     ft = FunctionalTable(mapreduce(((k, c), ) -> [(sym = k, val = i)
                                                   for i in 1:c], vcat, keycounts),
                          TrustOrdering(:sym, :val))
-    g = by(ft, (:sym, ))
-    cg = collect(g)
+    g = by(ft, (:sym, ))        # FIXME eventually this should be @inferred
+    @test eltype(typeof(g)) ≡ Tuple{NamedTuple{(:sym, ), Tuple{Symbol}},
+                                    FunctionalTable{NamedTuple{(:val, ), Tuple{Vector{Int8}}},
+                                                    Tuple{}}} # ordering, NOTE will change to :val
+    cg = @inferred collect(g)
     for (i, (s, c)) in enumerate(keycounts)
         @test cg[i] ≅ ((sym = s, ), FunctionalTable((val = 1:c, )))
     end

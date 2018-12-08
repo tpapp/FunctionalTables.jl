@@ -83,9 +83,10 @@ julia> split_namedtuple(NamedTuple{(:a, :c)}, (c = 1, b = 2, a = 3, d = 4))
 ((a = 3, c = 1), (b = 2, d = 4))
 ```
 """
-@inline split_namedtuple(splitter::Type{<:NamedTuple}, nt::NamedTuple) =
-    splitter(nt), Base.structdiff(nt, splitter)
-
+@inline function split_namedtuple(::Type{<:NamedTuple{N}}, nt::NamedTuple) where N
+    S = NamedTuple{N}
+    S(nt), Base.structdiff(nt, S)
+end
 
 """
 $(SIGNATURES)
