@@ -11,9 +11,12 @@ c = rand(Float64, N)
 
 ft = sort(FunctionalTable((a = a, b = b, c = c)), (:a, :b))
 
-@time map((_, ft) -> ft, by(ft, (:a, :b)));
+m(ft) = map((_, ft) -> ft, by(ft, (:a, :b)))
+
+@code_warntype m(ft)
+@time m(ft)
 # f77a599: 0.215s
-# pretty much unchanged after optimization
+# 0.09 after by optimization
 
 f(ft) = iterate(by(ft, (:a, :b)))
 @code_warntype f(ft)
