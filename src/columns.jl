@@ -271,6 +271,17 @@ end
 """
 $(SIGNATURES)
 
+Start sinks using row, using the default `known_types` when available.
+"""
+function start_sinks(cfg, row::T, known_types) where {T}
+    rowtypes = merge_default_types(T, known_types)
+    sinks = empty_sinks(cfg, rowtypes)
+    store!_or_reallocate_row(cfg, sinks, row)
+end
+
+"""
+$(SIGNATURES)
+
 Finalize a (named) tuple of sinks.
 """
 finalize_sinks(cfg, sinks::NamedTuple) = map(sink -> finalize_sink(cfg, sink), sinks)
@@ -281,7 +292,7 @@ $(SIGNATURES)
 Broadcast `store!_or_rellocate` for a compatible (named) tuple of `sinks` and `elts`. Return
 the (potentially) new sinks.
 """
-store!_or_reallocate_row(cfg, sinks, elts) =
+@inline store!_or_reallocate_row(cfg, sinks, elts) =
     map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
 
 """
@@ -314,8 +325,7 @@ function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R},
         return 0, columns, mask_try_ordering(ordering_rule, N)
     end
     elts, state = y
-    rowtypes = merge_default_types(typeof(elts), known_types)
-    sinks = store!_or_reallocate_row(cfg, empty_sinks(cfg, rowtypes), elts)
+    sinks = start_sinks(cfg, elts, known_types)
     collect_columns!(sinks, 1, cfg, itr, mask_try_ordering(ordering_rule, keys(elts)),
                      # :trust, we don't need the last element for comparison, hence the ()
                      R ≡ :trust ? () : elts, state)
