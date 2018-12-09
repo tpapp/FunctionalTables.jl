@@ -1,7 +1,7 @@
 using FunctionalTables, Test
 using FunctionalTables:
     # utilities
-    cancontain, narrow, append1, split_namedtuple, is_prefix,
+    cancontain, narrow, append1, split_namedtuple, is_prefix, merge_default_types,
     # column ordering building blocks
     ColumnOrdering, mask_ordering, table_ordering, cmp_ordering, retained_ordering,
     ordering_repr, split_compatible_ordering,
@@ -59,6 +59,14 @@ end
     @test_throws ErrorException split_namedtuple(s, (a = 1, b = 2))
 end
 
+@testset "merge_default_types" begin
+    T = NamedTuple{(:a, :b), Tuple{Union{}, Union{}}}
+    @test merge_default_types(T, typeof(NamedTuple())) ≡ T
+    @test merge_default_types(T, NamedTuple{(:c, :d), Tuple{Missing, String}}) ≡ T
+    @test merge_default_types(T, NamedTuple{(:a, ), Tuple{Missing}}) ≡
+        NamedTuple{(:a, :b), Tuple{Missing, Union{}}}
+end
+
 @testset "collect by names" begin
     itr = [(a = i, b = Float64(i), c = 'a' + i - 1) for i in 1:10]
     ordering = table_ordering((:a, :b, :c))
@@ -69,6 +77,24 @@ end
     @test result.b ≅ Float64.(1:10)
     @test result.c ≅ (0:9) .+ 'a'
     @test rule ≡ TrustOrdering(ordering)
+end
+
+@testset "RLE creation" begin
+    r = RLEVector{Missing}(Int8, Missing)
+    @test eltype(typeof(r)) ≡ Missing
+    @test length(r) == 0
+
+    r = RLEVector{Missing}(Int8, Float64)
+    @test eltype(typeof(r)) ≡ Float64
+    @test length(r) == 0
+
+    r = RLEVector{Missing}(Int8, Union{})
+    @test eltype(typeof(r)) ≡ Union{}
+    @test length(r) == 0
+
+    r = RLEVector{Missing}(Int8, Union{Missing, Float64})
+    @test eltype(typeof(r)) ≡ Union{Missing, Float64}
+    @test length(r) == 0
 end
 
 @testset "simple RLE" begin
@@ -398,4 +424,13 @@ end
     # exchange names
     @test rename(ft, (a = :b, b = :a)) ≅
         FunctionalTable((b = 1:3, a = 4:6), VerifyOrdering(:a, :b => reverse))
+end
+
+@testset "eltype of split tables" begin
+    ft = FunctionalTable((a = [1, 1, 1, 2, 2, 2],
+                          b = [1, 1, 1, 4, 4, 4]))
+    ft2 = map(by(ft, :a)) do _, ft
+        ft2 = filter(r -> r.b ≤ 1, ft)
+        Ref((bsum = sum(ft2.b), ))
+    end
 end

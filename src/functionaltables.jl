@@ -255,18 +255,25 @@ end
 Base.merge(ft::FunctionalTable, newcolumns::NamedTuple; replace = false) =
     merge(ft, FunctionalTable(newcolumns); replace = replace)
 
-Base.filter(f, ft::FunctionalTable; cfg = SINKCONFIG) =
-    FunctionalTable(Iterators.filter(f, ft), TrustOrdering(ordering(ft)))
+"""
+$(SIGNATURES)
+
+Filter a FunctionalTable using a prediate that maps rows (as `NamedTuple`s) to `Bool`.
+Preserves type (and thus ordering) of the table.
+"""
+function Base.filter(f, ft::FunctionalTable; cfg = SINKCONFIG)
+    FunctionalTable(collect_columns(cfg, Iterators.filter(f, ft),
+                                    TrustOrdering(ordering(ft)), eltype(ft))...)
+end
 
 """
 $(SIGNATURES)
 
 A `FunctionalTable` of the first `n` rows.
 
-Useful for previews and data exploration.
+Useful for previews and data exploration. Preserves type (and thus ordering) of the table.
 """
 function Base.first(ft::FunctionalTable, n::Integer; cfg::SinkConfig = SINKVECTORS)
-    FunctionalTable(TrustLength(min(length(ft), n)),
-                    map(col -> collect_column(cfg, Iterators.take(col, n)), columns(ft)),
-                    TrustOrdering(ordering(ft)))
+    i = 0
+    filter(_ -> (i += 1; i ≤ n), ft; cfg = cfg)
 end

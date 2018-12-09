@@ -91,6 +91,21 @@ end
 """
 $(SIGNATURES)
 
+Whenever `defaults` has a given key, use the corresponding type in `rowtype`, otherwise
+`Union{}`.
+"""
+Base.@pure function merge_default_types(rowtype::Type{<: NamedTuple{A}},
+                                        defaults::Type{<: NamedTuple{B}}) where {A, B}
+    M = Any[]
+    for a in A
+        push!(M, key_in(a, B) ? fieldtype(defaults, a) : Union{})
+    end
+    NamedTuple{A, Tuple{M...}}
+end
+
+"""
+$(SIGNATURES)
+
 Test if `b` starts with `a`.
 """
 is_prefix(a, b) = length(a) ≤ length(b) && all(a == b for (a,b) in zip(a, b))
