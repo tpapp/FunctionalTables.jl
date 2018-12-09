@@ -21,30 +21,33 @@ export SinkConfig, SINKVECTORS
 """
 $(TYPEDEF)
 """
-struct SinkConfig{M}
-    useRLE::Bool
+struct SinkConfig{useRLE, M}
     missingvalue::M
+    function SinkConfig{useRLE}(missingvalue::M) where {useRLE, M}
+        @argcheck useRLE isa Bool
+        @argcheck issingletontype(M)
+        new{useRLE, M}(missingvalue)
+    end
 end
+
+use_rle(cfg::SinkConfig{useRLE}) where useRLE = useRLE
 
 """
 $(SIGNATURES)
 
 Make a sink configuration, using defaults.
 """
-SinkConfig(; useRLE = true, missingvalue = missing) = SinkConfig(useRLE, missingvalue)
+SinkConfig(; useRLE = true, missingvalue = missing) = SinkConfig{useRLE}(missingvalue)
 
 "Default sink configuration."
-const SINKCONFIG = SinkConfig(;)
+const SINKCONFIG = SinkConfig{true}(missing)
 
 "Sink configuration that collects to vectors."
-const SINKVECTORS = SinkConfig(; useRLE = false)
+const SINKVECTORS = SinkConfig{false}(missing)
 
 ####
 #### Reference implementation for sinks: `Vector`
 ####
-
-
-# #
 
 """
 $(SIGNATURES)
@@ -52,13 +55,9 @@ $(SIGNATURES)
 Create and return a sink using configuration `cfg` that stores elements of type `T`. When
 `T` is unkown, use `Base.Bottom`.
 """
-function make_sink(cfg::SinkConfig{M}, ::Type{T}) where {M, T}
-    if cfg.useRLE
-        RLEVector{M}(Int8, T)
-    else
-        Vector{T}()
-    end
-end
+make_sink(cfg::SinkConfig{true,M}, ::Type{T}) where {M, T} = RLEVector{M}(Int8, T)
+
+make_sink(cfg::SinkConfig{false,M}, ::Type{T}) where {M, T} = Vector{T}()
 
 """
 $(SIGNATURES)
@@ -134,7 +133,7 @@ struct RLEVector{C,T,S,anyS}
     data::Vector{T}
     function RLEVector{S,anyS}(counts::Vector{C}, data::Vector{T}
                                ) where {C <: Signed, T, S, anyS}
-        @argcheck isconcretetype(S) && fieldcount(S) == 0 "$(S) is not a concrete singleton type."
+        @argcheck issingletontype(S) "$(S) is not a concrete singleton type."
         @argcheck anyS isa Bool
         @argcheck length(counts) ≥ length(data)
         new{eltype(counts), eltype(data), S, anyS}(counts, data)
