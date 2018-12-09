@@ -217,3 +217,14 @@ const TryOrdering = OrderingRule{:try}
 # forced conversion
 OrderingRule{R}(ordering_rule::OrderingRule) where {R} =
     OrderingRule{R}(ordering_rule.ordering)
+
+"""
+$(SIGNATURES)
+
+For `TryOrdering`, return a masked ordering rule that is is defined on `keys` so that
+comparisons make sense, otherwise return the original `ordering_rule` (that will just error
+for undefined keys).
+"""
+Base.@pure function mask_try_ordering(ordering_rule::OrderingRule{R}, keys::Keys) where {R}
+    R ≡ :try ? OrderingRule{R}(mask_ordering(ordering_rule.ordering, keys)) : ordering_rule
+end

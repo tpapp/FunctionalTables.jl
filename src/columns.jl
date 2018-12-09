@@ -39,37 +39,24 @@ const SINKCONFIG = SinkConfig(;)
 "Sink configuration that collects to vectors."
 const SINKVECTORS = SinkConfig(; useRLE = false)
 
-
-# helper functions
-
-"""
-$(SIGNATURES)
-
-Make sinks for a (named) tuple pf elements.
-"""
-make_sinks(cfg, elts::Union{Tuple, NamedTuple}) = map(elt -> make_sink(cfg, elt), elts)
-
-"""
-$(SIGNATURES)
-
-Finalize a (named) tuple of sinks.
-"""
-finalize_sinks(cfg, sinks::Union{Tuple, NamedTuple}) =
-    map(sink -> finalize_sink(cfg, sink), sinks)
+####
+#### Reference implementation for sinks: `Vector`
+####
 
 
-# # Reference implementation for sinks: `Vector`
+# #
 
 """
 $(SIGNATURES)
 
-Create and return a sink using configuration `cfg` that stores `elt`.
+Create and return a sink using configuration `cfg` that stores elements of type `T`. When
+`T` is unkown, use `Base.Bottom`.
 """
-function make_sink(cfg::SinkConfig{M}, elt) where M
+function make_sink(cfg::SinkConfig{M}, ::Type{T}) where {M, T}
     if cfg.useRLE
-        RLEVector{M}(Int8, elt)
+        RLEVector{M}(Int8, T)
     else
-        [narrow(elt)]
+        Vector{T}()
     end
 end
 
@@ -128,7 +115,8 @@ end
 """
 $(TYPEDEF)
 
-An RLE encoded vector, using negative lengths for missing values.
+An RLE encoded vector, using negative lengths for missing values. Use the
+`RLEVector{S}(C, T)` constructor for creating an empty one.
 
 When an elemenet in `counts` is positive, it encodes that many of the corresponding element
 in `data`.
@@ -153,16 +141,28 @@ struct RLEVector{C,T,S,anyS}
     end
 end
 
-RLEVector{S}(C::Type{<:Signed}, ::S) where {S} =
-    RLEVector{S, true}(-ones(C, 1), Vector{Union{}}())
+"""
+$(SIGNATURES)
 
-RLEVector{S}(C::Type{<:Signed}, elt) where {S} =
-    RLEVector{S, false}(ones(C, 1), [narrow(elt)])
+Create an empty RLEVector for `Union{T,S}`, with special-casing the singleton type `S`. RLE
+counts are stored in type `C`.
+"""
+RLEVector{S}(C::Type{<:Signed}, ::Type{S}) where {S} =
+    RLEVector{S, true}(Vector{C}(), Vector{Union{}}())
+
+RLEVector{S}(C::Type{<:Signed}, ::Type{T}) where {S, T} =
+    RLEVector{S, false}(Vector{C}(), Vector{T}())
+
+RLEVector{S}(C::Type{<:Signed}, ::Type{Union{S,T}}) where {S, T} =
+    RLEVector{S, true}(Vector{C}(), Vector{T}())
 
 function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S,anyS}, elt) where {C,T,S,anyS}
     @unpack counts, data = sink
     if cancontain(T, elt)       # can accommodate elt, same sink
-        if data[end] == elt && 0 < counts[end] < typemax(C)
+        if isempty(data)
+            push!(data, elt)
+            push!(counts, one(C))
+        elseif data[end] == elt && 0 < counts[end] < typemax(C)
             counts[end] += one(C) # increment existing count
         else
             push!(counts, one(C)) # start new RLE run
@@ -182,8 +182,10 @@ function store!_or_reallocate(cfg::SinkConfig, sink::RLEVector{C, T, S, false}, 
 end
 
 function store!_or_reallocate(::SinkConfig, sink::RLEVector{C,T,S,true}, elt::S) where {C,T,S}
-    @unpack counts, data = sink
-    if 0 > counts[end] > typemin(C) # ongoing RLE run with S
+    @unpack counts = sink
+    if isempty(counts)                  # no elements yet
+        push!(counts, -one(C))
+    elseif 0 > counts[end] > typemin(C) # ongoing RLE run with S
         counts[end] -= one(C)
     else
         push!(counts, -one(C))  # start new RLE runx
@@ -197,7 +199,7 @@ function Base.eltype(::Type{RLEVector{C,T,S,anyS}}) where {C,T,S,anyS}
     anyS ? Base.promote_typejoin(T,S) : T
 end
 
-Base.length(rle::RLEVector) = sum(abs ∘ Int, rle.counts)
+Base.length(rle::RLEVector) = isempty(rle.counts) ? 0 : sum(abs ∘ Int, rle.counts)
 
 function Base.iterate(rle::RLEVector{C,T,S},
                  (countsindex, dataindex, remaining) = (0, 0, zero(C))) where {C,T,S}
@@ -243,7 +245,9 @@ function collect_column(cfg::SinkConfig, itr)
     y = iterate(itr)
     y ≡ nothing && return nothing
     elt, state = y
-    collect_column!(make_sink(cfg::SinkConfig, elt), cfg, itr, state)
+    narrow_elt = narrow(elt)
+    sink = make_sink(cfg, typeof(narrow_elt))
+    collect_column!(store!_or_reallocate(cfg, sink, narrow_elt), cfg, itr, state)
 end
 
 function collect_column!(sink, cfg::SinkConfig, itr, state)
@@ -257,6 +261,31 @@ function collect_column!(sink, cfg::SinkConfig, itr, state)
 end
 
 """
+$(SIGNATURES)
+
+Empty sinks for a named tuple of elements, using a type.
+"""
+function empty_sinks(cfg, ::Type{NamedTuple{N,T}}) where {N,T}
+    NamedTuple{N}(map(S -> make_sink(cfg, S), fieldtypes(T)))
+end
+
+"""
+$(SIGNATURES)
+
+Finalize a (named) tuple of sinks.
+"""
+finalize_sinks(cfg, sinks::NamedTuple) = map(sink -> finalize_sink(cfg, sink), sinks)
+
+"""
+$(SIGNATURES)
+
+Broadcast `store!_or_rellocate` for a compatible (named) tuple of `sinks` and `elts`. Return
+the (potentially) new sinks.
+"""
+store!_or_reallocate_row(cfg, sinks, elts) =
+    map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
+
+"""
 len, columns, ordering_rule = $(SIGNATURES)
 
 Collect results from `itr`, which are supposed to be `NamedTuple`s with the same names, into
@@ -268,31 +297,41 @@ sinks (using config `cfg`), then finalize and return
 
 3. the ordering rule (which is always `::TrustOrdering`, by construction).
 
-The results can be
+Determine the names and types from the first named tuple, using `known_types` as the
+narrowest types for the given columns.
+
+# Special rules for empty iterators
+
+When `itr` is empty, use a `known_types` will be used to create empty columns, and only the
+`TryOrdering` rule will be narrowed to these. Other rule with more column names may cause an
+error in the callee, which is intentional.
 """
-function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R}) where R
+function collect_columns(cfg::SinkConfig, itr, ordering_rule::OrderingRule{R},
+                         known_types::Type{<:NamedTuple{N}} = NamedTuple{(), Tuple{}}
+                         ) where {R,N}
     y = iterate(itr)
-    y ≡ nothing && return 0, NamedTuple(), TrustOrdering() # empty iterable
-    elts, state = y
-    @argcheck elts isa NamedTuple
-    sinks = make_sinks(cfg, elts)
-    if R ≡ :try
-        # we need to narrow ordering so that comparisons make sense
-        ordering_rule = OrderingRule{R}(mask_ordering(ordering_rule.ordering, keys(elts)))
+    if y ≡ nothing
+        columns = finalize_sinks(cfg, empty_sinks(cfg, known_types))
+        return 0, columns, mask_try_ordering(ordering_rule, N)
     end
-    collect_columns!(sinks, 1, cfg, itr, ordering_rule,
+    elts, state = y
+    rowtypes = merge_default_types(typeof(elts), known_types)
+    sinks = store!_or_reallocate_row(cfg, empty_sinks(cfg, rowtypes), elts)
+    collect_columns!(sinks, 1, cfg, itr, mask_try_ordering(ordering_rule, keys(elts)),
                      # :trust, we don't need the last element for comparison, hence the ()
                      R ≡ :trust ? () : elts, state)
 end
 
-function collect_columns!(sinks::NamedTuple, len::Int, cfg, itr,
+function collect_columns!(sinks::NamedTuple, len::Int, cfg::SinkConfig, itr,
                           ordering_rule::OrderingRule{R}, lastelts, state) where R
     @unpack ordering = ordering_rule
     while true
         y = iterate(itr, state)
-        y ≡ nothing && return TrustLength(len), finalize_sinks(cfg, sinks), TrustOrdering(ordering_rule)
+        if y ≡ nothing
+            return TrustLength(len), finalize_sinks(cfg, sinks), TrustOrdering(ordering_rule)
+        end
         elts, state = y
-        newsinks = map((sink, elt) -> store!_or_reallocate(cfg, sink, elt), sinks, elts)
+        newsinks = store!_or_reallocate_row(cfg, sinks, elts)
         len += 1
         if R ≢ :trust
             if cmp_ordering(ordering, lastelts, elts) > 0
