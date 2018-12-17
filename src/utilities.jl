@@ -2,6 +2,8 @@
 ##### Utilities
 #####
 
+export wrapping, picking
+
 ####
 #### Container element type management
 ####
@@ -109,3 +111,37 @@ $(SIGNATURES)
 Test if `b` starts with `a`.
 """
 is_prefix(a, b) = length(a) ≤ length(b) && all(a == b for (a,b) in zip(a, b))
+
+####
+#### wrapping and picking
+####
+
+struct Wrapping{K}
+    function Wrapping{K}() where K
+        @argcheck K isa Symbol
+        new{K}()
+    end
+end
+
+(::Wrapping{K})(x) where K = NamedTuple{(K, )}((x, ))
+
+"""
+$(SIGNATURES)
+
+Return a callable that wraps its argument in a `NamedTuple` with a given `key`.
+"""
+wrapping(key::Symbol) = Wrapping{key}()
+
+struct Picking{K}
+    function Picking{K}() where K
+        @argcheck K isa Symbol
+        new{K}()
+    end
+end
+
+(::Picking{K})(x) where K = getproperty(x, K)
+
+"""
+$(SIGNATURES)
+"""
+picking(key::Symbol) = Picking{key}()
