@@ -67,6 +67,17 @@ end
         NamedTuple{(:a, :b), Tuple{Missing, Union{}}}
 end
 
+@testset "picking and wrapping" begin
+    x = 1:5
+    ax = wrapping(:a).(x)
+    @test ax == collect((a = i,) for i in x)
+    @test picking(:a).(ax) == x
+end
+
+####
+#### columns
+####
+
 @testset "collect by names" begin
     itr = [(a = i, b = Float64(i), c = 'a' + i - 1) for i in 1:10]
     ordering = table_ordering((:a, :b, :c))
