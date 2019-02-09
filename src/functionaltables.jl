@@ -150,11 +150,14 @@ function _showcolcontents(io::IO, itr)
 end
 
 function Base.show(io::IO, ft::FunctionalTable)
-    print(io, "FunctionalTable of $(length(ft)) rows, ", ordering_repr(ordering(ft)))
+    print(io, "FunctionalTable of $(length(ft)) rows, ")
+    printstyled(io, ordering_repr(ordering(ft)); color = :green)
     ioc = IOContext(io, :compact => true)
     for (key, col) in pairs(columns(ft))
         println(ioc)
-        print(ioc, "    ", key, " = ")
+        print(ioc, "    ")
+        printstyled(ioc, key; color = :blue)
+        print(ioc, " = ")
         _showcolcontents(ioc, col)
     end
 end
