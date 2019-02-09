@@ -2,7 +2,7 @@
 ##### Interface and implementation for split-apply-combine.
 #####
 
-export by, RepeatRow
+export by, RepeatRow, aggregator, ignoreindex
 
 """
 RepeatRow(row)
@@ -155,3 +155,7 @@ function Base.map(f, st::SplitTable; cfg = SINKCONFIG)
     FunctionalTable(Iterators.flatten(imap(args -> fuse(f, args...), st)),
                     TrustOrdering(ordering(st)); cfg = cfg)
 end
+
+aggregator(f) = ft -> Ref(map(f, columns(ft)))
+
+ignoreindex(f) = (_, args...) -> f(args...)
