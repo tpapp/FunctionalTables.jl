@@ -8,6 +8,7 @@ using FunctionalTables:
     # column collection building blocks
     SINKCONFIG, collect_column, collect_columns, RLEVector, TrustLength
 import Tables
+using Statistics: mean
 
 include("utilities.jl")         # utilities for tests
 
@@ -437,11 +438,20 @@ end
         FunctionalTable((b = 1:3, a = 4:6), VerifyOrdering(:a, :b => reverse))
 end
 
-@testset "eltype of split tables" begin
+@testset "eltype split tables" begin
     ft = FunctionalTable((a = [1, 1, 1, 2, 2, 2],
                           b = [1, 1, 1, 4, 4, 4]))
     ft2 = map(by(ft, :a)) do _, ft
-        ft2 = filter(r -> r.b ≤ 1, ft)
+        ft2 = filter(r -> r.b ≤ 1, ft) # here, ft2 is empty, but inference b has Int64 eltype
         Ref((bsum = sum(ft2.b), ))
     end
+    @test ft2 ≅ FunctionalTable((a = Int8[1, 2], bsum = Int8[3, 0]), TrustOrdering(:a))
+end
+
+@testset "aggregator and ignoreindex" begin
+    ft = FunctionalTable((a = [1, 1, 1, 2, 2, 2],
+                          b = [1, 1, 1, 4, 4, 4]))
+    ft_mean = FunctionalTable((a = Int8[1, 2], b = Int8[1, 4]), TrustOrdering(:a))
+    @test map(aggregator(mean), by(ft, :a)) ≅ ft_mean # same as below
+    @test map(ignoreindex(t -> Ref(map(mean, columns(t)))), by(ft, :a)) ≅ ft_mean
 end

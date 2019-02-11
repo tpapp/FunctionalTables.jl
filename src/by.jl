@@ -2,7 +2,7 @@
 ##### Interface and implementation for split-apply-combine.
 #####
 
-export by, RepeatRow
+export by, RepeatRow, ignoreindex, aggregator
 
 """
 RepeatRow(row)
@@ -155,3 +155,27 @@ function Base.map(f, st::SplitTable; cfg = SINKCONFIG)
     FunctionalTable(Iterators.flatten(imap(args -> fuse(f, args...), st)),
                     TrustOrdering(ordering(st)); cfg = cfg)
 end
+
+"""
+$(SIGNATURES)
+
+Wrap a function returning a closure that ignores the first argument (the index in
+[`by`](@ref) mappings).
+"""
+@inline ignoreindex(f) = (_, args...) -> f(args...)
+
+"""
+$(SIGNATURES)
+
+Wrap a function so that it maps columns of a `FunctionalTable` to a table with a single row,
+columwise, ignoring the index. Returns a closure.
+
+# Example
+
+```julia
+map(aggregator(mean), by(ft, :col))
+```
+
+will calculate means after grouping by `:col`.
+"""
+@inline aggregator(f) = ignoreindex(ft -> Ref(map(f, columns(ft))))
